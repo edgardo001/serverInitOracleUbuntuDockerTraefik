@@ -1,0 +1,32 @@
+services:
+  traefik:
+    image: traefik:v3.7.1
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik-net
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./data/acme.json:/etc/traefik/acme/acme.json
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.edgardovasquez.cl`)"
+      # - "traefik.http.routers.traefik.tls=true"
+      # - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_PASS_HASH?Variable TRAEFIK_PASS_HASH no definida}"
+
+networks:
+  traefik-net:
+    external: true

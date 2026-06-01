@@ -1,0 +1,20 @@
+services:
+  app1:
+    image: nginx:alpine
+    container_name: app1
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app1.entrypoints=web"
+      - "traefik.http.routers.app1.rule=Host(`app1.edgardovasquez.cl`)"
+      # - "traefik.http.routers.app1.tls=true"
+      # - "traefik.http.routers.app1.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app1.loadbalancer.server.port=80"
+
+networks:
+  traefik-net:
+    external: true
