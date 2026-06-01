@@ -1,0 +1,208 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "Traefik — KPIs Balanceo y A/B Testing",
+  "uid": "traefik-kpi",
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "panels": [
+    {
+      "title": "Distribución de Tráfico — A/B Testing (app-ab)",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(delta(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) by (service)",
+          "legendFormat": "{{ service }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "pieType": "pie",
+        "legend": { "displayMode": "table", "placement": "right" },
+        "reduceOptions": {
+          "values": true,
+          "calcs": ["sum"],
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": { "displayName": "{{ service }}" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "app-a@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4CAF50" } }] },
+          { "matcher": { "id": "byName", "options": "app-b@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF5722" } }] }
+        ]
+      }
+    },
+    {
+      "title": "Distribución de Tráfico — Round-Robin (app-lb)",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(delta(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) by (service)",
+          "legendFormat": "{{ service }}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "pieType": "pie",
+        "legend": { "displayMode": "table", "placement": "right" },
+        "reduceOptions": {
+          "values": true,
+          "calcs": ["sum"],
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "app-x@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#00b09b" } }] },
+          { "matcher": { "id": "byName", "options": "app-y@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#fa709a" } }] },
+          { "matcher": { "id": "byName", "options": "app-z@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#a18cd1" } }] }
+        ]
+      }
+    },
+    {
+      "title": "Requests por Segundo (RPS) — Total",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(traefik_service_requests_total[$__rate_interval]))",
+          "legendFormat": "RPS Total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "rps", "decimals": 1, "min": 0 }
+      }
+    },
+    {
+      "title": "Porcentaje por Servicio — A/B Testing",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-a@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) * 100",
+          "legendFormat": "App A (esperado 20%)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-b@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) * 100",
+          "legendFormat": "App B (esperado 80%)",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "decimals": 1, "min": 0, "max": 100 }
+      }
+    },
+    {
+      "title": "Porcentaje por Servicio — Round-Robin",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-x@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "legendFormat": "App X (esperado 33.3%)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-y@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "legendFormat": "App Y (esperado 33.3%)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-z@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "legendFormat": "App Z (esperado 33.3%)",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "legend": { "calcs": ["mean", "max", "min"], "displayMode": "table", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "decimals": 1, "min": 0, "max": 100 }
+      }
+    },
+    {
+      "title": "Tiempo de Respuesta — P50 / P95 / P99",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(traefik_service_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(traefik_service_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(traefik_service_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "decimals": 3 }
+      }
+    },
+    {
+      "title": "Códigos de Estado HTTP",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "sum(rate(traefik_service_requests_total{code=~\"2..\"}[$__rate_interval])) by (code)",
+          "legendFormat": "{{ code }}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{code=~\"3..\"}[$__rate_interval])) by (code)",
+          "legendFormat": "{{ code }}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{code=~\"4..\"}[$__rate_interval])) by (code)",
+          "legendFormat": "{{ code }}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[$__rate_interval])) by (code)",
+          "legendFormat": "{{ code }}",
+          "refId": "D"
+        }
+      ],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "rps", "decimals": 1 }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m"]
+  },
+  "tags": ["traefik", "kpi", "ab-testing", "round-robin"]
+}

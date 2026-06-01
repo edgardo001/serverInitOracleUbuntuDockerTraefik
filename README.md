@@ -28,6 +28,8 @@
 - **App2** — nginx:alpine → `https://app2.edgardovasquez.cl`
 - **App X / Y / Z** — Cluster round-robin → `https://app-lb.edgardovasquez.cl`
 - **App A / B** — Cluster ponderado (20/80) A/B testing → `https://app-ab.edgardovasquez.cl`
+- **Grafana** — Dashboard KPIs → `https://grafana.edgardovasquez.cl` (admin/admin)
+- **Prometheus** — Métricas internas (no expuesto públicamente)
 - **Dashboard Traefik** — `https://traefik.edgardovasquez.cl` (Basic Auth: `usuario_dashboard` / `CONTRASENA_DASHBOARD`)
 
 ---
@@ -62,6 +64,19 @@
 ├── app_a/
 │   ├── docker-compose.yml    # Contenedor App A — A/B testing (20%)
 │   └── index.html
+├── app_b/
+│   ├── docker-compose.yml    # Contenedor App B — A/B testing (80%)
+│   └── index.html
+└── monitoring/
+    ├── docker-compose.yml    # Prometheus + Grafana
+    ├── prometheus/
+    │   └── prometheus.yml    # Config de scraping (traefik:8080)
+    └── grafana/
+        ├── datasources/
+        │   └── datasource.yml    # Datasource Prometheus auto-provisionado
+        └── dashboards/
+            ├── dashboards.yml    # Provisioning de dashboards
+            └── traefik-kpi.json  # Dashboard KPIs (A/B, round-robin, latencias)
 └── app_b/
     ├── docker-compose.yml    # Contenedor App B — A/B testing (80%)
     └── index.html
@@ -152,6 +167,7 @@ Crear registros tipo A apuntando a la IP pública del servidor, con proxy naranj
 | A | `app2` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `app-lb` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `app-ab` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
+| A | `grafana` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `traefik` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 
 > **Nota**: El proxy naranja oculta la IP real del servidor y habilita la CDN de Cloudflare. Por eso se usa DNS-01 en lugar de HTTP-01 para los certificados.
@@ -1050,6 +1066,126 @@ YDYN
 
 ---
 
+#### 8.20 Habilitar métricas Prometheus en Traefik
+
+Editar `~/serverInit/traefik/traefik.yml` y agregar después del bloque `api`:
+
+```yaml
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+```
+
+Esto expone métricas en `http://traefik:8080/metrics` (puerto interno, solo accesible desde la red Docker).
+
+---
+
+#### 8.21 `monitoring/prometheus/prometheus.yml` — Configuración de Prometheus
+
+```bash
+mkdir -p ~/serverInit/monitoring/prometheus ~/serverInit/monitoring/grafana/datasources ~/serverInit/monitoring/grafana/dashboards
+
+cat > ~/serverInit/monitoring/prometheus/prometheus.yml << 'YPROM'
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+    metrics_path: /metrics
+YPROM
+```
+
+---
+
+#### 8.22 `monitoring/grafana/datasources/datasource.yml` — Datasource auto-provisionado
+
+```bash
+cat > ~/serverInit/monitoring/grafana/datasources/datasource.yml << 'YDTSRC'
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+YDTSRC
+```
+
+---
+
+#### 8.23 `monitoring/grafana/dashboards/dashboards.yml` — Provisioning de dashboards
+
+```bash
+cat > ~/serverInit/monitoring/grafana/dashboards/dashboards.yml << 'YDDPROV'
+apiVersion: 1
+
+providers:
+  - name: 'Traefik KPIs'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
+YDDPROV
+```
+
+---
+
+#### 8.24 `monitoring/docker-compose.yml` — Prometheus + Grafana
+
+```bash
+cat > ~/serverInit/monitoring/docker-compose.yml << 'YMON'
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.edgardovasquez.cl`)"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  traefik-net:
+    external: true
+YMON
+```
+
 ### Paso 9: Configurar Token de Cloudflare
 
 Este paso es **crítico**. Sin un token válido, los certificados no se emitirán:
@@ -1085,6 +1221,9 @@ cd ~/serverInit/app_z && docker compose up -d
 # Cluster A/B testing (app_a, app_b)
 cd ~/serverInit/app_a && docker compose up -d
 cd ~/serverInit/app_b && docker compose up -d
+
+# Finalmente el stack de monitoreo (Prometheus + Grafana)
+cd ~/serverInit/monitoring && docker compose up -d
 ```
 
 > **Nota importante**: Docker en Oracle Cloud es **lento** (30-180 segundos por comando). Esto es normal debido al almacenamiento en bloque con alta latencia de I/O. Ten paciencia y no canceles los comandos prematuramente.
@@ -1111,6 +1250,8 @@ Deberías ver los 3 contenedores corriendo:
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_z |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_a |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_b |
+| ... | prom/prometheus:v2.53.0 | Up X minutes | 9090/tcp | prometheus |
+| ... | grafana/grafana:11.1.0 | Up X minutes | 3000/tcp | grafana |
 
 #### 11.2 Verificar con curl
 
@@ -1136,6 +1277,9 @@ for i in {1..10}; do curl -s https://app-ab.edgardovasquez.cl | grep -o '<h1>.*<
 # Verificar el dashboard de Traefik con autenticación básica
 # Debe retornar código 200
 curl -u usuario_dashboard:CONTRASENA_DASHBOARD -s -o /dev/null -w "%{http_code}" https://traefik.edgardovasquez.cl/dashboard/
+
+# Verificar métricas de Prometheus (debe retornar métricas en texto plano)
+curl -s -H "Host: app-ab.edgardovasquez.cl" http://127.0.0.1/metrics 2>/dev/null | head -5 || echo "Prometheus expone en puerto interno 8080"
 ```
 
 #### 11.3 Verificar desde el navegador
@@ -1146,6 +1290,7 @@ Abrir las siguientes URLs:
 - 🟢 https://app2.edgardovasquez.cl — Página "App 2" con gradiente rosa
 - 🟢 https://app-lb.edgardovasquez.cl — Cluster round-robin (refrescar para ver alternar entre App X, Y, Z)
 - 🟢 https://app-ab.edgardovasquez.cl — A/B testing (App A 20% / App B 80%)
+- 🟢 https://grafana.edgardovasquez.cl — Dashboard KPIs (usuario: `admin`, contraseña: `admin`)
 - 🟢 https://traefik.edgardovasquez.cl — Dashboard (usuario: `usuario_dashboard`, contraseña: `CONTRASENA_DASHBOARD`)
 
 ---
@@ -1242,6 +1387,53 @@ http:
             weight: 70   # ← cambiar aquí
 ```
 Traefik detecta el cambio automáticamente (no requiere restart).
+
+---
+
+### Monitoreo con Prometheus + Grafana
+
+El stack de monitoreo permite visualizar en tiempo real los KPIs del balanceo de carga y A/B testing.
+
+**Componentes:**
+
+| Servicio | URL | Credenciales |
+|----------|-----|-------------|
+| Grafana | `https://grafana.edgardovasquez.cl` | `admin` / `admin` (cambiar en 1er ingreso) |
+| Prometheus | Puerto interno 9090 (solo red Docker) | — |
+
+**Dashboard pre-configurado (Traefik KPIs):**
+
+| Panel | Qué muestra |
+|-------|------------|
+| Distribución A/B Testing | Gráfico de torta con % de requests entre App A (20%) y App B (80%) |
+| Distribución Round-Robin | Gráfico de torta con % entre App X, Y, Z (~33% cada una) |
+| Requests por Segundo (RPS) | Serie temporal de throughput total |
+| % por Servicio A/B | Líneas temporales del porcentaje real vs esperado |
+| % por Servicio RR | Líneas temporales del porcentaje real vs esperado |
+| Tiempo de Respuesta | P50, P95, P99 en segundos |
+| Códigos de Estado HTTP | 2xx, 3xx, 4xx, 5xx por segundo |
+
+**Métricas disponibles** (expuestas por Traefik en `traefik:8080/metrics`):
+
+- `traefik_service_requests_total` — Contador de requests por servicio
+- `traefik_service_request_duration_seconds_bucket` — Histograma de latencias
+- `traefik_service_request_duration_seconds_sum/count` — Suma y conteo de latencias
+- `traefik_entrypoint_requests_total` — Requests por entrypoint
+
+**Comandos útiles:**
+
+```bash
+# Verificar que Prometheus recolecta métricas de Traefik
+docker exec prometheus wget -qO- http://traefik:8080/metrics | head -20
+
+# Ver targets de Prometheus (UP/DOWN)
+curl -s http://127.0.0.1:9090/api/v1/targets | python3 -m json.tool | grep -E '"health"|"job"'
+
+# Hacer consulta rápida a Prometheus (últimos 5 min de requests totales)
+curl -s 'http://127.0.0.1:9090/api/v1/query?query=sum(increase(traefik_service_requests_total[5m]))' | python3 -m json.tool
+```
+
+> **Nota**: El puerto 9090 de Prometheus NO se expone públicamente. Solo es accesible desde la red Docker. Para consultas ad-hoc usa `docker exec prometheus ...` o accede desde Grafana.
 
 ---
 
@@ -1386,10 +1578,10 @@ for app in app_x app_y app_z app_a app_b; do (cd ~/serverInit/$app && docker com
 
 ```bash
 # Detener todos los servicios (apps primero, luego Traefik)
-for d in app1 app2 app_x app_y app_z app_a app_b traefik; do (cd ~/serverInit/$d && docker compose down); done
+for d in app1 app2 app_x app_y app_z app_a app_b monitoring traefik; do (cd ~/serverInit/$d && docker compose down); done
 
 # Iniciar todos los servicios (Traefik primero, luego apps)
-for d in traefik app1 app2 app_x app_y app_z app_a app_b; do (cd ~/serverInit/$d && docker compose up -d); done
+for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose up -d); done
 
 # Ver logs de Traefik en tiempo real
 docker logs traefik -f
@@ -1431,6 +1623,7 @@ dig +short app1.edgardovasquez.cl @1.1.1.1
 dig +short app2.edgardovasquez.cl @1.1.1.1
 dig +short app-lb.edgardovasquez.cl @1.1.1.1
 dig +short app-ab.edgardovasquez.cl @1.1.1.1
+dig +short grafana.edgardovasquez.cl @1.1.1.1
 dig +short traefik.edgardovasquez.cl @1.1.1.1
 ```
 
@@ -1503,5 +1696,5 @@ Para depuración o pruebas sin un token de Cloudflare válido, el stack puede op
 3. En cada `docker-compose.yml`, cambiar `entrypoints` a `websecure` y descomentar las líneas `.tls` y `.tls.certresolver`
 4. Reiniciar todos los contenedores:
    ```bash
-   for d in traefik app1 app2 app_x app_y app_z app_a app_b; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
+   for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
    ```

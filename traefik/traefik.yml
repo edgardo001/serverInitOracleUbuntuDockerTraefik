@@ -18,6 +18,17 @@ api:
   dashboard: true
 
 # ---------------------------------------------------------------------------
+# Métricas Prometheus
+# ---------------------------------------------------------------------------
+# Expone métricas en /metrics (puerto 8080 interno) para ser recolectadas
+# por Prometheus. Permite monitorear distribución de tráfico, RPS, latencias
+# y códigos de estado por servicio y entrypoint.
+metrics:
+  prometheus:
+    addEntryPointsLabels: true
+    addServicesLabels: true
+
+# ---------------------------------------------------------------------------
 # Registro de acceso (Access Log)
 # ---------------------------------------------------------------------------
 # Activa el registro de todas las peticiones HTTP procesadas por Traefik.

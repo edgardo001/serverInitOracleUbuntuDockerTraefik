@@ -1,0 +1,12 @@
+# Prometheus — Configuración de Scraping
+# Recolecta métricas de Traefik para monitorear el balanceo de carga
+# y los experimentos de A/B testing.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+    metrics_path: /metrics
