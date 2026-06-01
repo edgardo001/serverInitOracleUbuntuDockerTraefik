@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App X</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge {
+            display: inline-block; background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App X</h1>
+        <p>Servicio X funcionando con HTTPS via Traefik</p>
+        <div class="badge">Balanceo Round-Robin</div>
+    </div>
+</body>
+</html>

@@ -26,6 +26,7 @@
 - **Traefik** v3.7.1 — Proxy reverso con Let's Encrypt (DNS-01 vía Cloudflare)
 - **App1** — nginx:alpine → `https://app1.edgardovasquez.cl`
 - **App2** — nginx:alpine → `https://app2.edgardovasquez.cl`
+- **App X / Y / Z** — Cluster round-robin → `https://app-lb.edgardovasquez.cl`
 - **Dashboard Traefik** — `https://traefik.edgardovasquez.cl` (Basic Auth: `usuario_dashboard` / `CONTRASENA_DASHBOARD`)
 
 ---
@@ -45,9 +46,18 @@
 ├── app1/
 │   ├── docker-compose.yml    # Contenedor App1 (nginx)
 │   └── index.html            # Página estática de App1
-└── app2/
-    ├── docker-compose.yml    # Contenedor App2 (nginx)
-    └── index.html            # Página estática de App2
+├── app2/
+│   ├── docker-compose.yml    # Contenedor App2 (nginx)
+│   └── index.html            # Página estática de App2
+├── app_x/
+│   ├── docker-compose.yml    # Contenedor App X (nginx) — parte del cluster round-robin
+│   └── index.html            # Página estática de App X
+├── app_y/
+│   ├── docker-compose.yml    # Contenedor App Y (nginx) — parte del cluster round-robin
+│   └── index.html            # Página estática de App Y
+└── app_z/
+    ├── docker-compose.yml    # Contenedor App Z (nginx) — parte del cluster round-robin
+    └── index.html            # Página estática de App Z
 ```
 
 ---
@@ -133,6 +143,7 @@ Crear registros tipo A apuntando a la IP pública del servidor, con proxy naranj
 |------|--------|-----------------|-------|-----|
 | A | `app1` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `app2` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
+| A | `app-lb` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `traefik` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 
 > **Nota**: El proxy naranja oculta la IP real del servidor y habilita la CDN de Cloudflare. Por eso se usa DNS-01 en lugar de HTTP-01 para los certificados.
@@ -648,6 +659,208 @@ YDC2
 
 ---
 
+#---
+
+#### 8.9 `app_x/index.html` — Página estática de App X
+
+```bash
+cat > ~/serverInit/app_x/index.html << 'YHTMLX'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App X</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App X</h1>
+        <p>Servicio X funcionando con HTTPS via Traefik</p>
+        <div class="badge">Balanceo Round-Robin</div>
+    </div>
+</body>
+</html>
+YHTMLX
+```
+
+---
+
+#### 8.10 `app_x/docker-compose.yml` — Contenedor App X (parte del cluster round-robin)
+
+```bash
+cat > ~/serverInit/app_x/docker-compose.yml << 'YDCX'
+services:
+  app_x:
+    image: nginx:alpine
+    container_name: app_x
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app-lb.entrypoints=websecure"
+      - "traefik.http.routers.app-lb.rule=Host(`app-lb.edgardovasquez.cl`)"
+      - "traefik.http.routers.app-lb.tls=true"
+      - "traefik.http.routers.app-lb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app-lb.loadbalancer.server.port=80"
+      - "traefik.http.services.app-lb.loadbalancer.sticky.cookie=false"
+
+networks:
+  traefik-net:
+    external: true
+YDCX
+```
+
+> **Clave del round-robin**: Los 3 contenedores (`app_x`, `app_y`, `app_z`) usan el **mismo nombre de router** (`app-lb`) y el **mismo nombre de servicio** (`app-lb`). Traefik los agrupa automáticamente como 3 servidores detrás de un solo balanceador, distribuyendo las peticiones en round-robin. La etiqueta `sticky.cookie=false` deshabilita sesiones persistentes para forzar el balanceo.
+
+---
+
+#### 8.11 `app_y/index.html` — Página estática de App Y
+
+```bash
+cat > ~/serverInit/app_y/index.html << 'YHTMLY'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Y</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App Y</h1>
+        <p>Servicio Y funcionando con HTTPS via Traefik</p>
+        <div class="badge">Balanceo Round-Robin</div>
+    </div>
+</body>
+</html>
+YHTMLY
+```
+
+---
+
+#### 8.12 `app_y/docker-compose.yml` — Contenedor App Y (parte del cluster round-robin)
+
+```bash
+cat > ~/serverInit/app_y/docker-compose.yml << 'YDCY'
+services:
+  app_y:
+    image: nginx:alpine
+    container_name: app_y
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app-lb.entrypoints=websecure"
+      - "traefik.http.routers.app-lb.rule=Host(`app-lb.edgardovasquez.cl`)"
+      - "traefik.http.routers.app-lb.tls=true"
+      - "traefik.http.routers.app-lb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app-lb.loadbalancer.server.port=80"
+      - "traefik.http.services.app-lb.loadbalancer.sticky.cookie=false"
+
+networks:
+  traefik-net:
+    external: true
+YDCY
+```
+
+---
+
+#### 8.13 `app_z/index.html` — Página estática de App Z
+
+```bash
+cat > ~/serverInit/app_z/index.html << 'YHTMLZ'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Z</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App Z</h1>
+        <p>Servicio Z funcionando con HTTPS via Traefik</p>
+        <div class="badge">Balanceo Round-Robin</div>
+    </div>
+</body>
+</html>
+YHTMLZ
+```
+
+---
+
+#### 8.14 `app_z/docker-compose.yml` — Contenedor App Z (parte del cluster round-robin)
+
+```bash
+cat > ~/serverInit/app_z/docker-compose.yml << 'YDCZ'
+services:
+  app_z:
+    image: nginx:alpine
+    container_name: app_z
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app-lb.entrypoints=websecure"
+      - "traefik.http.routers.app-lb.rule=Host(`app-lb.edgardovasquez.cl`)"
+      - "traefik.http.routers.app-lb.tls=true"
+      - "traefik.http.routers.app-lb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app-lb.loadbalancer.server.port=80"
+      - "traefik.http.services.app-lb.loadbalancer.sticky.cookie=false"
+
+networks:
+  traefik-net:
+    external: true
+YDCZ
+```
+
+---
+
 ### Paso 9: Configurar Token de Cloudflare
 
 Este paso es **crítico**. Sin un token válido, los certificados no se emitirán:
@@ -674,6 +887,11 @@ cd ~/serverInit/traefik && docker compose up -d
 # Luego las aplicaciones
 cd ~/serverInit/app1 && docker compose up -d
 cd ~/serverInit/app2 && docker compose up -d
+
+# Finalmente el cluster round-robin (app_x, app_y, app_z)
+cd ~/serverInit/app_x && docker compose up -d
+cd ~/serverInit/app_y && docker compose up -d
+cd ~/serverInit/app_z && docker compose up -d
 ```
 
 > **Nota importante**: Docker en Oracle Cloud es **lento** (30-180 segundos por comando). Esto es normal debido al almacenamiento en bloque con alta latencia de I/O. Ten paciencia y no canceles los comandos prematuramente.
@@ -691,10 +909,13 @@ docker ps
 Deberías ver los 3 contenedores corriendo:
 
 | CONTAINER ID | IMAGE | STATUS | PORTS | NAMES |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | ... | traefik:v3.7.1 | Up X minutes | 0.0.0.0:80→80, 0.0.0.0:443→443 | traefik |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app1 |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app2 |
+| ... | nginx:alpine | Up X minutes | 80/tcp | app_x |
+| ... | nginx:alpine | Up X minutes | 80/tcp | app_y |
+| ... | nginx:alpine | Up X minutes | 80/tcp | app_z |
 
 #### 11.2 Verificar con curl
 
@@ -704,6 +925,14 @@ curl -I https://app1.edgardovasquez.cl
 
 # Verificar que App2 responde con HTTPS
 curl -I https://app2.edgardovasquez.cl
+
+# Verificar el cluster round-robin — cada petición debe ir a un contenedor distinto
+curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
+curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
+curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
+curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
+curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
+# Deberías ver alternarse: App X, App Y, App Z, App X, App Y...
 
 # Verificar el dashboard de Traefik con autenticación básica
 # Debe retornar código 200
@@ -716,6 +945,7 @@ Abrir las siguientes URLs:
 
 - 🟢 https://app1.edgardovasquez.cl — Página "App 1" con gradiente púrpura
 - 🟢 https://app2.edgardovasquez.cl — Página "App 2" con gradiente rosa
+- 🟢 https://app-lb.edgardovasquez.cl — Cluster round-robin (refrescar para ver alternar entre App X, Y, Z)
 - 🟢 https://traefik.edgardovasquez.cl — Dashboard (usuario: `usuario_dashboard`, contraseña: `CONTRASENA_DASHBOARD`)
 
 ---
@@ -752,6 +982,31 @@ Verificar la redirección:
 curl -I http://app1.edgardovasquez.cl
 # Debe retornar 301 → https://app1.edgardovasquez.cl
 ```
+
+### Balanceo Round-Robin con Traefik
+
+El cluster `app-lb.edgardovasquez.cl` demuestra una característica poderosa de Traefik: **balanceo de carga automático entre múltiples contenedores**.
+
+**Cómo funciona:**
+- Los 3 contenedores (`app_x`, `app_y`, `app_z`) definen el **mismo router** (`app-lb`) y el **mismo servicio** (`app-lb`) en sus labels de Docker.
+- Traefik detecta que múltiples contenedores exponen el mismo servicio y los agrupa automáticamente como servidores backend.
+- El método de balanceo por defecto es **Weighted Round Robin** (WRR) con peso igual para todos.
+- Cada nueva petición HTTP se enruta al siguiente contenedor de la lista circular.
+
+**Verificar el balanceo:**
+```bash
+# Ejecutar 6 veces seguidas — debe alternar entre App X, Y, Z
+for i in {1..6}; do curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'; done
+```
+
+**Sticky Sessions (opcional):**
+Si necesitas que un cliente siempre caiga en el mismo servidor (sesiones persistentes), activa la cookie de afinidad:
+```yaml
+- "traefik.http.services.app-lb.loadbalancer.sticky.cookie=true"
+```
+Por defecto está en `false` para forzar el balanceo round-robin puro.
+
+---
 
 ### Docker Lento en Oracle Cloud
 
@@ -801,6 +1056,28 @@ Para agregar, por ejemplo, `app3.edgardovasquez.cl`:
 
 5. Traefik detecta automáticamente el nuevo contenedor y solicita el certificado a Let's Encrypt.
 
+### Agregar más réplicas al Cluster Round-Robin
+
+Para escalar el cluster `app-lb.edgardovasquez.cl` con más réplicas:
+
+1. **Crear nuevo directorio** (ej. `app_w`):
+   ```bash
+   mkdir -p ~/serverInit/app_w
+   ```
+
+2. **Crear `index.html`** con contenido distintivo.
+
+3. **Crear `docker-compose.yml`**: copiar de `app_x` y cambiar solo `container_name: app_w`. **No cambiar** los labels del router/servicio — deben mantener `app-lb` para que Traefik los agregue al mismo balanceador.
+
+4. **Iniciar**:
+   ```bash
+   cd ~/serverInit/app_w && docker compose up -d
+   ```
+
+5. Traefik detecta automáticamente el nuevo contenedor y comienza a enviarle tráfico en round-robin.
+
+---
+
 ### Cambiar Credenciales del Dashboard
 
 ```bash
@@ -820,11 +1097,11 @@ cd ~/serverInit/traefik && docker compose down && docker compose up -d
 ### Comandos Rápidos
 
 ```bash
-# Detener todos los servicios (en orden: apps primero, Traefik al final)
-for d in app1 app2 traefik; do (cd ~/serverInit/$d && docker compose down); done
+# Detener todos los servicios (apps primero, luego Traefik)
+for d in app1 app2 app_x app_y app_z traefik; do (cd ~/serverInit/$d && docker compose down); done
 
-# Iniciar todos los servicios (en orden: Traefik primero, luego apps)
-for d in traefik app1 app2; do (cd ~/serverInit/$d && docker compose up -d); done
+# Iniciar todos los servicios (Traefik primero, luego apps)
+for d in traefik app1 app2 app_x app_y app_z; do (cd ~/serverInit/$d && docker compose up -d); done
 
 # Ver logs de Traefik en tiempo real
 docker logs traefik -f
@@ -852,12 +1129,16 @@ docker logs traefik --tail 50 -f
 curl -I -H "Host: app1.edgardovasquez.cl" http://127.0.0.1
 curl -I -H "Host: app2.edgardovasquez.cl" http://127.0.0.1
 
+# Verificar round-robin local (bypass de DNS)
+for i in {1..6}; do curl -s -H "Host: app-lb.edgardovasquez.cl" http://127.0.0.1 | grep -o '<h1>.*</h1>'; done
+
 # Probar dashboard con autenticación local
 curl -u usuario_dashboard:CONTRASENA_DASHBOARD -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
 
 # Verificar resolución DNS desde servidores públicos
 dig +short app1.edgardovasquez.cl @1.1.1.1
 dig +short app2.edgardovasquez.cl @1.1.1.1
+dig +short app-lb.edgardovasquez.cl @1.1.1.1
 dig +short traefik.edgardovasquez.cl @1.1.1.1
 ```
 
@@ -867,7 +1148,7 @@ dig +short traefik.edgardovasquez.cl @1.1.1.1
 
 | Problema | Causa Probable | Solución |
 |----------|---------------|----------|
-| `404` al visitar una app | App no iniciada o Traefik no la detecta | `docker ps` para verificar que los 3 contenedores estén `Up` |
+| `404` al visitar una app | App no iniciada o Traefik no la detecta | `docker ps` para verificar contenedores `Up` |
 | `502 Bad Gateway` | App iniciada pero no responde internamente | `docker logs app1` para ver errores de nginx |
 | Certificados no se emiten | `CF_DNS_API_TOKEN` inválido o no configurado | Verificar `~/serverInit/traefik/.env` y `docker logs traefik` |
 | `TLS handshake timeout` al hacer pull | MTU de Docker incorrecto para Oracle Cloud | Verificar que `/etc/docker/daemon.json` tenga `"mtu": 1450` |
@@ -930,5 +1211,5 @@ Para depuración o pruebas sin un token de Cloudflare válido, el stack puede op
 3. En cada `docker-compose.yml`, cambiar `entrypoints` a `websecure` y descomentar las líneas `.tls` y `.tls.certresolver`
 4. Reiniciar todos los contenedores:
    ```bash
-   for d in traefik app1 app2; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
+   for d in traefik app1 app2 app_x app_y app_z; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
    ```
