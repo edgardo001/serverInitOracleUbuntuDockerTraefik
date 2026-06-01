@@ -922,11 +922,6 @@ services:
       - ./index.html:/usr/share/nginx/html/index.html:ro
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app-ab.entrypoints=websecure"
-      - "traefik.http.routers.app-ab.rule=Host(`app-ab.edgardovasquez.cl`)"
-      - "traefik.http.routers.app-ab.tls=true"
-      - "traefik.http.routers.app-ab.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.app-ab.service=app-ab-wrr@file"
       - "traefik.http.services.app-a.loadbalancer.server.port=80"
 
 networks:
@@ -990,11 +985,6 @@ services:
       - ./index.html:/usr/share/nginx/html/index.html:ro
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app-ab.entrypoints=websecure"
-      - "traefik.http.routers.app-ab.rule=Host(`app-ab.edgardovasquez.cl`)"
-      - "traefik.http.routers.app-ab.tls=true"
-      - "traefik.http.routers.app-ab.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.app-ab.service=app-ab-wrr@file"
       - "traefik.http.services.app-b.loadbalancer.server.port=80"
 
 networks:
@@ -1005,23 +995,9 @@ YDCB
 
 ---
 
-#### 8.19 Actualizar `traefik/dynamic.yml` — Agregar servicio WRR para A/B testing
+#### 8.19 `traefik/dynamic.yml` — Router + WRR para A/B testing
 
-Editar `~/serverInit/traefik/dynamic.yml` y agregar al inicio del archivo:
-
-```yaml
-http:
-  services:
-    app-ab-wrr:
-      weighted:
-        services:
-          - name: app-a@docker
-            weight: 20
-          - name: app-b@docker
-            weight: 80
-```
-
-El archivo completo debe verse así:
+Tanto el router como el servicio ponderado se definen en este archivo. Los contenedores solo exponen servicios vía Docker:
 
 ```bash
 cat > ~/serverInit/traefik/dynamic.yml << 'YDYN'
@@ -1030,9 +1006,20 @@ cat > ~/serverInit/traefik/dynamic.yml << 'YDYN'
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Servicios WRR — Balanceo Ponderado para A/B Testing
+# Router + WRR para app-ab.edgardovasquez.cl
 # ---------------------------------------------------------------------------
+# El router y el servicio ponderado se definen aquí (provider file).
+# Los backends app-a@docker y app-b@docker se exponen via Docker provider.
 http:
+  routers:
+    app-ab:
+      entrypoints:
+        - websecure
+      rule: Host(`app-ab.edgardovasquez.cl`)
+      tls:
+        certResolver: letsencrypt
+      service: app-ab-wrr
+
   services:
     app-ab-wrr:
       weighted:
@@ -1043,7 +1030,7 @@ http:
             weight: 80
 
 # ---------------------------------------------------------------------------
-# Opciones de TLS
+# Opciones TLS
 # ---------------------------------------------------------------------------
 tls:
   options:
@@ -1059,7 +1046,7 @@ tls:
 YDYN
 ```
 
-> **Importante**: El router `app-ab` se define en los labels de Docker pero apunta al servicio `app-ab-wrr@file` (definido en el archivo). El sufijo `@file` es necesario para que Traefik busque el servicio en el provider `file` en lugar de `docker`. Traefik recarga `dynamic.yml` automáticamente sin reiniciar.
+> **Arquitectura**: El router `app-ab` y el servicio WRR `app-ab-wrr` viven en `dynamic.yml` (provider file). Los contenedores `app_a` y `app_b` solo exponen sus servicios `app-a@docker` y `app-b@docker` via labels de Docker. El sufijo `@docker` en el WRR referencia servicios del provider Docker. Traefik recarga `dynamic.yml` automáticamente — si solo cambias pesos no necesitas reiniciar nada.
 
 ---
 
@@ -1231,9 +1218,9 @@ El cluster `app-ab.edgardovasquez.cl` implementa **A/B testing** distribuyendo t
 | App B | 80 | ~80% de las peticiones |
 
 **Cómo funciona:**
-1. Cada contenedor expone su propio servicio de Docker (`app-a`, `app-b`) con `loadbalancer.server.port=80`.
-2. En `traefik/dynamic.yml` se define un servicio **Weighted Round Robin (WRR)** que referencia ambos servicios con sus respectivos pesos.
-3. El router `app-ab` (definido en los labels de Docker) apunta a `app-ab-wrr@file` — el sufijo `@file` indica que el servicio está en el provider `file`.
+1. Cada contenedor expone su servicio via Docker label: `traefik.http.services.app-a.loadbalancer.server.port=80` (sin router).
+2. En `traefik/dynamic.yml` se define el **router** `app-ab` y un servicio **Weighted Round Robin (WRR)** que referencia `app-a@docker` (peso 20) y `app-b@docker` (peso 80).
+3. El router enfile apunta al servicio `app-ab-wrr` (mismo archivo, provider file).
 4. Traefik recarga `dynamic.yml` automáticamente sin reiniciar.
 
 **Verificar:**
