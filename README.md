@@ -120,8 +120,8 @@ cat > ~/serverInit/traefik/.env << 'EOF'
 CF_DNS_API_TOKEN=REEMPLAZA_CON_TU_TOKEN
 
 # Credenciales para el dashboard de Traefik (traefik.edgardovasquez.cl)
-# Usuario: admin - Password: edgardovasquez2025
-TRAEFIK_PASS_HASH=admin:$$apr1$$DwLjHN2T$$V23FeN8wk2VNkthoeiVNx/
+# Usuario: usuario_dashboard - Password: CONTRASENA_DASHBOARD
+TRAEFIK_PASS_HASH=usuario_dashboard:$apr1$hash_ejemplo
 EOF
 ```
 
@@ -412,7 +412,7 @@ Probar desde el navegador:
 
 - https://app1.edgardovasquez.cl
 - https://app2.edgardovasquez.cl
-- https://traefik.edgardovasquez.cl (usuario: `admin`, pass: `edgardovasquez2025`)
+- https://traefik.edgardovasquez.cl (usuario: `usuario_dashboard`, pass: `CONTRASENA_DASHBOARD`)
 
 O con curl:
 
@@ -481,9 +481,11 @@ docker compose -f ~/serverInit/traefik/docker-compose.yml restart
 
 ---
 
-### Modo HTTP de Prueba (Sin HTTPS/SSL)
+### Modo HTTP de Prueba (Sin HTTPS/SSL) — Solo Referencia
 
-Para propósitos de depuración o pruebas donde no se dispone de un token de Cloudflare válido (o se desea omitir la validación de certificados temporalmente), el stack ha sido configurado para operar **únicamente bajo HTTP (Puerto 80)**.
+> **Estado actual: HTTPS ACTIVO.** Esta sección documenta los cambios que se hicieron *temporalmente* durante la depuración inicial. Actualmente el stack opera en modo HTTPS con redirección automática.
+
+Para propósitos de depuración o pruebas donde no se dispone de un token de Cloudflare válido (o se desea omitir la validación de certificados temporalmente), el stack puede configurarse para operar **únicamente bajo HTTP (Puerto 80)**.
 
 #### Cambios realizados en la configuración actual:
 1. **Traefik (`traefik/traefik.yml`):** Se comentaron las líneas de redirección automática de HTTP a HTTPS:
@@ -539,7 +541,7 @@ Durante la resolución de problemas de enrutamiento y acceso (donde se obtenían
     # Para probar la App 2:
     curl -I -H "Host: app2.edgardovasquez.cl" http://127.0.0.1
     # Para probar el Dashboard de Traefik (usando Basic Auth):
-    curl -u admin:edgardovasquez2025 -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
+    curl -u usuario_dashboard:CONTRASENA_DASHBOARD -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
     ```
 *   **Verificar resolución DNS externa:**
     *Verifica si un host resuelve y a qué IP desde servidores DNS públicos (ej. Cloudflare 1.1.1.1).*
@@ -578,3 +580,42 @@ Durante la resolución de problemas de enrutamiento y acceso (donde se obtenían
     ├── docker-compose.yml
     └── index.html
 ```
+
+## Apertura de puertos en Oracle Cloud (Ubuntu 24.04) vía iptables
+
+### Problema típico
+En las imágenes de **Oracle Cloud** el firewall se gestiona con reglas persistentes de `iptables`. Desactivar `ufw` no elimina esas reglas, por lo que los puertos 80 y 443 siguen bloqueados y Traefik no responde.
+
+### Solución definitiva
+Conéctate por SSH (PuTTY, PowerShell, etc.) y ejecuta los siguientes comandos:
+
+```bash
+# Abrir puerto 80 (HTTP)
+sudo iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+
+# Abrir puerto 443 (HTTPS)
+sudo iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+
+# Guardar de forma permanente
+sudo netfilter-persistent save
+```
+
+#### Verificación
+```bash
+sudo iptables -L INPUT -n --line-numbers
+```
+Deberías ver las reglas `ACCEPT` para los puertos 80 y 443 en la primera posición.
+
+Con estos pasos el firewall deja de bloquear el tráfico y los dominios `app1.edgardovasquez.cl`, `app2.edgardovasquez.cl` y `traefik.edgardovasquez.cl` volverán a estar accesibles.
+
+
+## Resolución de HTTP → HTTPS
+
+- **Traefik** redirige automáticamente peticiones HTTP (puerto 80) a HTTPS (puerto 443) mediante el bloque `http.redirections` en `traefik.yml`.
+- En **Cloudflare**, con el proxy naranja activo y SSL/TLS en *Full*, una petición HTTP puede recibir `521` si Cloudflare no alcanza el origen en el puerto 80.
+- **Solución recomendada**: habilitar **Always Use HTTPS** en la pestaña *SSL/TLS → Edge Certificates* para `app1.edgardovasquez.cl`, `app2.edgardovasquez.cl` y `traefik.edgardovasquez.cl`. Así Cloudflare hará la redirección antes de contactar al servidor, evitando el `521`.
+- Verifica la redirección con:
+  ```bash
+  curl -I http://app1.edgardovasquez.cl
+  ```
+  Debería devolver `301` → `https://app1.edgardovasquez.cl`.
