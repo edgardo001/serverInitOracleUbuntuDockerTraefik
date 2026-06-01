@@ -1,20 +1,86 @@
+# =============================================================================
+# Docker Compose – App1 (Aplicación de ejemplo tras Traefik)
+# -----------------------------------------------------------------------------
+# Este archivo define el servicio "app1", un contenedor Nginx ligero que sirve
+# contenido estático. Traefik lo descubre automáticamente a través de las
+# labels de Docker y lo expone en el dominio app1.edgardovasquez.cl con TLS
+# gestionado por Let's Encrypt.
+# =============================================================================
+
+# Sección de servicios: declara los contenedores que Docker Compose debe
+# crear y administrar para este stack.
 services:
+
+  # ---------------------------------------------------------------------------
+  # Servicio: app1
+  # ---------------------------------------------------------------------------
   app1:
+    # Imagen oficial de Nginx basada en Alpine Linux. Alpine reduce
+    # significativamente el tamaño de la imagen (~40 MB vs ~140 MB de la
+    # versión completa), lo que acelera descargas y reduce superficie de ataque.
     image: nginx:alpine
+
+    # Nombre fijo del contenedor; facilita su identificación en logs y
+    # comandos como `docker ps`, `docker logs app1`, etc.
     container_name: app1
+
+    # Política de reinicio: el contenedor se reinicia automáticamente si
+    # se detiene inesperadamente (fallo, reinicio del servidor), pero NO
+    # si fue detenido manualmente con `docker stop`.
     restart: unless-stopped
+
+    # Redes a las que se conecta el contenedor.
     networks:
+      # Se conecta a "traefik-net", la misma red externa donde se encuentra
+      # Traefik. Esto es obligatorio para que Traefik pueda enrutar tráfico
+      # hacia este contenedor. Sin esta red compartida, Traefik no podría
+      # comunicarse con app1.
       - traefik-net
+
+    # Volúmenes montados en el contenedor.
     volumes:
+      # Monta el archivo index.html local dentro del directorio de contenido
+      # por defecto de Nginx (solo lectura). Esto permite personalizar la
+      # página servida sin necesidad de construir una imagen personalizada.
       - ./index.html:/usr/share/nginx/html/index.html:ro
+
+    # Labels de Docker que Traefik lee para configurar el enrutamiento
+    # dinámico hacia este contenedor.
     labels:
+      # Habilita el descubrimiento de este contenedor por Traefik.
+      # Sin esta label, Traefik lo ignora (porque exposedByDefault=false
+      # está configurado en traefik.yml).
       - "traefik.enable=true"
+
+      # Define que el router "app1" escucha únicamente en el entrypoint
+      # "websecure" (puerto 443/HTTPS). El tráfico HTTP ya es redirigido
+      # automáticamente a HTTPS por la configuración global de Traefik.
       - "traefik.http.routers.app1.entrypoints=websecure"
+
+      # Regla de enrutamiento: las peticiones al dominio app1.edgardovasquez.cl
+      # serán dirigidas a este contenedor.
       - "traefik.http.routers.app1.rule=Host(`app1.edgardovasquez.cl`)"
+
+      # Activa TLS para este router, asegurando que la conexión sea cifrada.
       - "traefik.http.routers.app1.tls=true"
+
+      # Especifica el resolver de certificados "letsencrypt" para obtener
+      # y renovar automáticamente el certificado TLS de este dominio.
       - "traefik.http.routers.app1.tls.certresolver=letsencrypt"
+
+      # Indica a Traefik en qué puerto interno del contenedor escucha Nginx.
+      # Aunque Nginx usa el puerto 80 por defecto, es necesario declararlo
+      # explícitamente porque el contenedor no expone puertos directamente
+      # al host (Traefik maneja toda la comunicación).
       - "traefik.http.services.app1.loadbalancer.server.port=80"
 
+# =============================================================================
+# Redes
+# =============================================================================
 networks:
+  # Red "traefik-net": declarada como externa. Debe existir previamente
+  # (creada con `docker network create traefik-net`). Permite que este
+  # stack comparta la red con Traefik y otros servicios sin acoplarlos
+  # en un único archivo docker-compose.
   traefik-net:
     external: true

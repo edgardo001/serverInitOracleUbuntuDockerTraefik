@@ -1,33 +1,126 @@
+# =============================================================================
+# Traefik – Configuración Estática (traefik.yml)
+# -----------------------------------------------------------------------------
+# Este archivo contiene la configuración estática de Traefik. Se carga una sola
+# vez al iniciar el contenedor y define los entrypoints (puertos de escucha),
+# los providers (fuentes de configuración dinámica) y los resolvers de
+# certificados TLS. Los cambios en este archivo requieren reiniciar Traefik.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# API y Dashboard
+# ---------------------------------------------------------------------------
 api:
+  # Habilita el dashboard web de Traefik, que proporciona una interfaz gráfica
+  # para visualizar routers, servicios, middlewares y el estado general del
+  # proxy. El acceso al dashboard se protege mediante Basic Auth configurado
+  # en las labels del docker-compose.yml.
   dashboard: true
 
+# ---------------------------------------------------------------------------
+# Registro de acceso (Access Log)
+# ---------------------------------------------------------------------------
+# Activa el registro de todas las peticiones HTTP procesadas por Traefik.
+# Se usa la configuración vacía {} para habilitar el log con los valores
+# por defecto (salida estándar, formato common). Útil para depuración,
+# auditoría y monitoreo del tráfico.
 accessLog: {}
 
+# ---------------------------------------------------------------------------
+# Entrypoints
+# ---------------------------------------------------------------------------
+# Los entrypoints son los puntos de entrada de la red donde Traefik escucha
+# conexiones entrantes. Se definen dos: uno para HTTP y otro para HTTPS.
 entryPoints:
+
+  # Entrypoint "web": recibe tráfico HTTP en el puerto 80.
   web:
+    # Dirección y puerto de escucha. ":80" escucha en todas las interfaces
+    # de red del contenedor en el puerto 80.
     address: ":80"
+
     http:
       redirections:
         entryPoint:
+          # Redirige automáticamente todo el tráfico HTTP al entrypoint
+          # "websecure" (HTTPS). Esto garantiza que ningún usuario acceda
+          # al sitio sin cifrado TLS.
           to: websecure
+          # Esquema de la redirección: indica que la URL redirigida debe
+          # usar el protocolo HTTPS.
           scheme: https
+
+  # Entrypoint "websecure": recibe tráfico HTTPS en el puerto 443.
+  # Este es el punto de entrada principal para todo el tráfico seguro.
   websecure:
+    # Dirección y puerto de escucha. ":443" escucha en todas las interfaces
+    # de red del contenedor en el puerto 443 (TLS).
     address: ":443"
 
+# ---------------------------------------------------------------------------
+# Providers (Fuentes de configuración dinámica)
+# ---------------------------------------------------------------------------
+# Los providers le dicen a Traefik de dónde obtener la configuración dinámica
+# (routers, servicios, middlewares). Se usan dos providers: Docker y File.
 providers:
+
+  # Provider Docker: detecta automáticamente los contenedores en ejecución
+  # y lee sus labels para generar la configuración de enrutamiento.
   docker:
+    # Ruta al socket de Docker dentro del contenedor. Traefik se comunica
+    # con el daemon de Docker a través de este socket para descubrir
+    # contenedores y sus labels.
     endpoint: "unix:///var/run/docker.sock"
+
+    # Por defecto, NO exponer contenedores. Solo los contenedores con la
+    # label "traefik.enable=true" serán visibles para Traefik. Esto evita
+    # exponer accidentalmente servicios internos al exterior.
     exposedByDefault: false
+
+  # Provider File: carga configuración dinámica desde un archivo YAML.
+  # Se usa para definir opciones de TLS, middlewares compartidos y otras
+  # configuraciones que no provienen de labels de Docker.
   file:
+    # Ruta al archivo de configuración dinámica dentro del contenedor.
+    # Este archivo se monta como volumen desde ./dynamic.yml en el host.
     filename: /etc/traefik/dynamic.yml
 
+# ---------------------------------------------------------------------------
+# Resolvers de certificados TLS (ACME / Let's Encrypt)
+# ---------------------------------------------------------------------------
+# Definen cómo Traefik obtiene y renueva automáticamente los certificados
+# TLS mediante el protocolo ACME de Let's Encrypt.
 certificatesResolvers:
+
+  # Resolver "letsencrypt": configuración para obtener certificados gratuitos
+  # de Let's Encrypt.
   letsencrypt:
     acme:
+      # Correo electrónico de contacto registrado en Let's Encrypt.
+      # Se usa para recibir notificaciones de expiración de certificados
+      # y avisos importantes sobre la cuenta ACME.
       email: admin@edgardovasquez.cl
+
+      # Ruta donde Traefik almacena los certificados y la información de
+      # la cuenta ACME. Este archivo se persiste mediante un volumen de
+      # Docker para no perder los certificados al reiniciar el contenedor.
       storage: /etc/traefik/acme/acme.json
+
+      # Método de validación: DNS Challenge.
+      # En lugar de responder a una petición HTTP (HTTP challenge), Traefik
+      # crea un registro DNS TXT temporal para demostrar el control del
+      # dominio. Esto permite obtener certificados wildcard y funciona
+      # incluso si el puerto 80 no está accesible desde Internet.
       dnsChallenge:
+        # Proveedor DNS: Cloudflare. Traefik usa la API de Cloudflare
+        # (autenticada con CF_DNS_API_TOKEN) para crear y eliminar los
+        # registros TXT necesarios para la validación.
         provider: cloudflare
+
+        # Servidores DNS que Traefik consulta para verificar que el registro
+        # TXT se ha propagado antes de solicitar el certificado a Let's
+        # Encrypt. Se usan los DNS públicos de Cloudflare (1.1.1.1) y
+        # Google (8.8.8.8) para mayor fiabilidad.
         resolvers:
           - "1.1.1.1:53"
           - "8.8.8.8:53"

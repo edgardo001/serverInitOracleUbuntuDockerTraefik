@@ -1,32 +1,127 @@
+# =============================================================================
+# Docker Compose – Traefik (Reverse Proxy)
+# -----------------------------------------------------------------------------
+# Este archivo define el servicio de Traefik, que actúa como proxy inverso y
+# balanceador de carga para todos los contenedores del stack. Traefik gestiona
+# automáticamente los certificados TLS mediante Let's Encrypt (vía DNS challenge
+# de Cloudflare) y redirige todo el tráfico HTTP a HTTPS.
+# =============================================================================
+
+# Sección de servicios: aquí se declaran los contenedores que Docker Compose
+# debe crear y administrar.
 services:
+
+  # ---------------------------------------------------------------------------
+  # Servicio: traefik
+  # ---------------------------------------------------------------------------
   traefik:
+    # Imagen oficial de Traefik v3.7.1. Se fija la versión para garantizar
+    # reproducibilidad y evitar cambios inesperados en actualizaciones.
     image: traefik:v3.7.1
+
+    # Nombre fijo del contenedor; facilita la identificación en logs y comandos
+    # como `docker ps` o `docker logs traefik`.
     container_name: traefik
+
+    # Política de reinicio: el contenedor se reinicia siempre que se detenga,
+    # excepto si fue detenido manualmente con `docker stop`. Esto asegura alta
+    # disponibilidad del proxy inverso ante fallos o reinicios del servidor.
     restart: unless-stopped
+
+    # Opciones de seguridad del contenedor.
     security_opt:
+      # Impide que los procesos dentro del contenedor obtengan privilegios
+      # adicionales (por ejemplo, mediante setuid). Reduce la superficie de
+      # ataque en caso de que el contenedor sea comprometido.
       - no-new-privileges:true
+
+    # Redes a las que se conecta el contenedor.
     networks:
+      # Se conecta a la red externa "traefik-net", compartida con los servicios
+      # que Traefik debe enrutar. Todos los contenedores que necesiten ser
+      # accesibles a través de Traefik deben estar en esta misma red.
       - traefik-net
+
+    # Puertos expuestos en el host. Traefik necesita escuchar en los puertos
+    # estándar de HTTP y HTTPS para recibir tráfico externo.
     ports:
+      # Puerto 80 del host → puerto 80 del contenedor (HTTP).
+      # Se usa para recibir peticiones HTTP que serán redirigidas a HTTPS.
       - "80:80"
+      # Puerto 443 del host → puerto 443 del contenedor (HTTPS/TLS).
+      # Es el punto de entrada principal para el tráfico seguro.
       - "443:443"
+
+    # Variables de entorno inyectadas al contenedor.
     environment:
+      # Token de la API DNS de Cloudflare. Traefik lo utiliza para crear
+      # registros TXT temporales durante el DNS challenge de Let's Encrypt,
+      # lo que permite obtener certificados wildcard sin exponer el puerto 80
+      # durante la validación. El valor se toma del archivo .env.
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+
+    # Volúmenes montados en el contenedor.
     volumes:
+      # Socket de Docker (solo lectura). Traefik lo necesita para detectar
+      # automáticamente los contenedores en ejecución y leer sus labels de
+      # configuración. El flag ":ro" evita que Traefik pueda modificar el
+      # daemon de Docker.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # Archivo de configuración estática de Traefik (solo lectura).
+      # Define entrypoints, providers y resolvers de certificados.
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
+
+      # Archivo de configuración dinámica de Traefik (solo lectura).
+      # Contiene opciones de TLS (versiones mínimas, cipher suites, etc.).
       - ./dynamic.yml:/etc/traefik/dynamic.yml:ro
+
+      # Almacén de certificados ACME. Traefik guarda aquí los certificados
+      # obtenidos de Let's Encrypt. Se monta con escritura para que Traefik
+      # pueda actualizar y renovar los certificados automáticamente.
       - ./data/acme.json:/etc/traefik/acme/acme.json
+
+    # Labels de Docker que Traefik lee para auto-configurar su propio enrutamiento.
     labels:
+      # Habilita el descubrimiento de este contenedor por Traefik.
       - "traefik.enable=true"
+
+      # Define que el router "traefik" escucha únicamente en el entrypoint
+      # "websecure" (puerto 443/HTTPS).
       - "traefik.http.routers.traefik.entrypoints=websecure"
+
+      # Regla de enrutamiento: el dashboard de Traefik será accesible
+      # exclusivamente a través del dominio traefik.edgardovasquez.cl.
       - "traefik.http.routers.traefik.rule=Host(`traefik.edgardovasquez.cl`)"
+
+      # Activa TLS para este router, forzando conexiones cifradas.
       - "traefik.http.routers.traefik.tls=true"
+
+      # Especifica que los certificados TLS para este router se obtienen
+      # mediante el resolver "letsencrypt" definido en traefik.yml.
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+
+      # Conecta el router al servicio interno "api@internal", que es el
+      # dashboard y la API de Traefik.
       - "traefik.http.routers.traefik.service=api@internal"
+
+      # Aplica el middleware "auth" a este router, requiriendo autenticación
+      # básica (usuario/contraseña) antes de acceder al dashboard.
       - "traefik.http.routers.traefik.middlewares=auth"
+
+      # Configura el middleware "auth" como Basic Auth. El hash de la
+      # contraseña se toma de la variable de entorno TRAEFIK_PASS_HASH.
+      # Si la variable no está definida, Docker Compose mostrará el mensaje
+      # de error personalizado "Variable TRAEFIK_PASS_HASH no definida".
       - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_PASS_HASH?Variable TRAEFIK_PASS_HASH no definida}"
 
+# =============================================================================
+# Redes
+# =============================================================================
 networks:
+  # Red "traefik-net": se declara como externa, lo que significa que debe
+  # haber sido creada previamente con `docker network create traefik-net`.
+  # Esto permite que múltiples stacks de Docker Compose compartan la misma
+  # red y que Traefik pueda enrutar tráfico hacia todos ellos.
   traefik-net:
     external: true
