@@ -1331,6 +1331,57 @@ nano ~/serverInit/traefik/.env
 cd ~/serverInit/traefik && docker compose down && docker compose up -d
 ```
 
+### Recargar Traefik después de cambios en `dynamic.yml`
+
+| Acción | Comando | Cuándo usarlo |
+|--------|---------|---------------|
+| **Recarga automática** | *(ninguno)* | Cambios en `dynamic.yml` se detectan solos (ej: cambiar pesos WRR) |
+| **Reinicio suave** | `docker compose -f ~/serverInit/traefik/docker-compose.yml restart` | Si la recarga automática no surtió efecto |
+| **Reinicio completo** | `cd ~/serverInit/traefik && docker compose down && docker compose up -d` | Cambios en `traefik.yml` (config estática) o en `.env` |
+
+> `docker compose restart` es más rápido que `down + up` porque no recrea el contenedor, solo reinicia el proceso de Traefik.
+
+### Desplegar / Reiniciar / Redeploy apps `app_*`
+
+Todos los comandos funcionan igual para cualquier app (`app_x`, `app_y`, `app_z`, `app_a`, `app_b`, etc.):
+
+```bash
+# --- Desplegar por primera vez o después de git pull ---
+cd ~/serverInit/app_x && docker compose up -d
+
+# --- Ver estado de una app ---
+docker ps --filter name=app_x
+
+# --- Ver logs en tiempo real ---
+docker logs app_x -f
+
+# --- Reiniciar una app (sin bajar el contenedor) ---
+docker restart app_x
+
+# --- Redeploy (bajar y subir, recarga index.html cambios) ---
+cd ~/serverInit/app_x && docker compose down && docker compose up -d
+
+# --- Redeploy forzado (reconstruye sin caché, útil si cambió la imagen) ---
+cd ~/serverInit/app_x && docker compose down && docker compose pull && docker compose up -d
+
+# --- Detener app sin eliminar el contenedor ---
+docker stop app_x
+
+# --- Iniciar app detenida ---
+docker start app_x
+```
+
+**Redeploy rápido después de editar `index.html`** (lo más común):
+```bash
+docker restart app_x   # nginx recarga el archivo del volumen montado
+```
+Solo `docker compose down && docker compose up -d` forzará a nginx a mostrar cambios en `index.html` porque el volumen `./index.html` se monta como `:ro` (read-only) y nginx cachea en memoria. Si editas `index.html` y no ves cambios, usa `docker restart app_x` primero; si aún no funciona, haz redeploy completo.
+
+**Redeploy de todas las apps `app_*` a la vez:**
+```bash
+for app in app_x app_y app_z app_a app_b; do (cd ~/serverInit/$app && docker compose down && docker compose up -d); done
+```
+
 ### Comandos Rápidos
 
 ```bash
