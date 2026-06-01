@@ -2,22 +2,25 @@
 # Traefik – Configuración Dinámica (dynamic.yml)
 # -----------------------------------------------------------------------------
 # Este archivo contiene la configuración dinámica de Traefik, cargada a través
-# del provider "file". A diferencia de traefik.yml (estática), los cambios aquí
-# pueden ser detectados automáticamente sin reiniciar Traefik.
-#
-# Actualmente define las opciones de TLS para endurecer la seguridad de las
-# conexiones HTTPS, limitando las versiones y cipher suites permitidas.
+# del provider "file". Los cambios aquí son detectados automáticamente sin
+# reiniciar Traefik.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Servicios HTTP — Balanceo Ponderado (WRR)
+# Routers y Servicios — A/B Testing con WRR
 # ---------------------------------------------------------------------------
-# Este servicio combina dos backends (app-a y app-b) con pesos distintos
-# para implementar A/B testing en app-ab.edgardovasquez.cl:
-#   - app-a@docker → 20% del tráfico
-#   - app-b@docker → 80% del tráfico
-# ---------------------------------------------------------------------------
+# Router + Weighted Round Robin para app-ab.edgardovasquez.cl
+# Los backends app-a y app-b se exponen via Docker provider (app-a@docker).
 http:
+  routers:
+    app-ab:
+      entrypoints:
+        - websecure
+      rule: Host(`app-ab.edgardovasquez.cl`)
+      tls:
+        certResolver: letsencrypt
+      service: app-ab-wrr
+
   services:
     app-ab-wrr:
       weighted:
@@ -32,47 +35,12 @@ http:
 # ---------------------------------------------------------------------------
 tls:
   options:
-    # Perfil "default": se aplica automáticamente a todas las conexiones TLS
-    # que no especifiquen un perfil distinto. Definir un perfil default
-    # garantiza una línea base de seguridad para todos los servicios.
     default:
-
-      # Versión mínima de TLS aceptada: TLS 1.2.
-      # Se deshabilitan TLS 1.0 y TLS 1.1 porque tienen vulnerabilidades
-      # conocidas (POODLE, BEAST, etc.) y ya no son considerados seguros.
-      # Los navegadores modernos soportan TLS 1.2+ desde hace años.
       minVersion: VersionTLS12
-
-      # Lista explícita de cipher suites permitidas. Al definirla
-      # manualmente, se descartan suites débiles u obsoletas. Todas las
-      # suites aquí listadas usan intercambio de claves ECDHE (forward
-      # secrecy) y cifrado autenticado (AEAD), lo que representa las
-      # mejores prácticas actuales.
       cipherSuites:
-        # AES-256-GCM con SHA-384, usando curvas elípticas ECDSA.
-        # Alta seguridad, preferida cuando el servidor tiene certificado ECDSA.
         - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-
-        # AES-256-GCM con SHA-384, usando RSA para la autenticación.
-        # Equivalente al anterior pero compatible con certificados RSA.
         - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-
-        # ChaCha20-Poly1305, usando curvas elípticas ECDSA.
-        # Cifrado moderno, especialmente eficiente en dispositivos sin
-        # aceleración AES por hardware (p. ej. móviles ARM).
         - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
-
-        # ChaCha20-Poly1305, usando RSA para la autenticación.
-        # Misma ventaja de rendimiento que el anterior, compatible con
-        # certificados RSA.
         - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
-
-        # AES-128-GCM con SHA-256, usando curvas elípticas ECDSA.
-        # Buen equilibrio entre seguridad y rendimiento; AES-128 sigue
-        # siendo considerado seguro y es más rápido que AES-256.
         - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-
-        # AES-128-GCM con SHA-256, usando RSA para la autenticación.
-        # Versión RSA del anterior, asegura compatibilidad con clientes
-        # que solo soportan certificados RSA.
         - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
