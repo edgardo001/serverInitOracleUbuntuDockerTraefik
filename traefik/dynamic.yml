@@ -10,6 +10,24 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
+# Servicios HTTP — Balanceo Ponderado (WRR)
+# ---------------------------------------------------------------------------
+# Este servicio combina dos backends (app-a y app-b) con pesos distintos
+# para implementar A/B testing en app-ab.edgardovasquez.cl:
+#   - app-a@docker → 20% del tráfico
+#   - app-b@docker → 80% del tráfico
+# ---------------------------------------------------------------------------
+http:
+  services:
+    app-ab-wrr:
+      weighted:
+        services:
+          - name: app-a@docker
+            weight: 20
+          - name: app-b@docker
+            weight: 80
+
+# ---------------------------------------------------------------------------
 # Opciones de TLS
 # ---------------------------------------------------------------------------
 tls:

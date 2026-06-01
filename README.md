@@ -27,6 +27,7 @@
 - **App1** — nginx:alpine → `https://app1.edgardovasquez.cl`
 - **App2** — nginx:alpine → `https://app2.edgardovasquez.cl`
 - **App X / Y / Z** — Cluster round-robin → `https://app-lb.edgardovasquez.cl`
+- **App A / B** — Cluster ponderado (20/80) A/B testing → `https://app-ab.edgardovasquez.cl`
 - **Dashboard Traefik** — `https://traefik.edgardovasquez.cl` (Basic Auth: `usuario_dashboard` / `CONTRASENA_DASHBOARD`)
 
 ---
@@ -50,14 +51,20 @@
 │   ├── docker-compose.yml    # Contenedor App2 (nginx)
 │   └── index.html            # Página estática de App2
 ├── app_x/
-│   ├── docker-compose.yml    # Contenedor App X (nginx) — parte del cluster round-robin
-│   └── index.html            # Página estática de App X
+│   ├── docker-compose.yml    # Contenedor App X — parte del cluster round-robin
+│   └── index.html
 ├── app_y/
-│   ├── docker-compose.yml    # Contenedor App Y (nginx) — parte del cluster round-robin
-│   └── index.html            # Página estática de App Y
-└── app_z/
-    ├── docker-compose.yml    # Contenedor App Z (nginx) — parte del cluster round-robin
-    └── index.html            # Página estática de App Z
+│   ├── docker-compose.yml    # Contenedor App Y — parte del cluster round-robin
+│   └── index.html
+├── app_z/
+│   ├── docker-compose.yml    # Contenedor App Z — parte del cluster round-robin
+│   └── index.html
+├── app_a/
+│   ├── docker-compose.yml    # Contenedor App A — A/B testing (20%)
+│   └── index.html
+└── app_b/
+    ├── docker-compose.yml    # Contenedor App B — A/B testing (80%)
+    └── index.html
 ```
 
 ---
@@ -144,6 +151,7 @@ Crear registros tipo A apuntando a la IP pública del servidor, con proxy naranj
 | A | `app1` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `app2` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `app-lb` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
+| A | `app-ab` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 | A | `traefik` | `IP_DEL_SERVIDOR` | ✅ Naranja (Proxied) | Auto |
 
 > **Nota**: El proxy naranja oculta la IP real del servidor y habilita la CDN de Cloudflare. Por eso se usa DNS-01 en lugar de HTTP-01 para los certificados.
@@ -861,6 +869,200 @@ YDCZ
 
 ---
 
+#### 8.15 `app_a/index.html` — Página estática de App A (20%)
+
+```bash
+cat > ~/serverInit/app_a/index.html << 'YHTMLA'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App A</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem; font-size: 0.9rem; }
+        .weight { font-size: 3rem; font-weight: bold; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App A</h1>
+        <p>Variante A — A/B Testing</p>
+        <div class="weight">20%</div>
+        <div class="badge">Balanceo Ponderado</div>
+    </div>
+</body>
+</html>
+YHTMLA
+```
+
+---
+
+#### 8.16 `app_a/docker-compose.yml` — Contenedor App A (A/B 20%)
+
+```bash
+cat > ~/serverInit/app_a/docker-compose.yml << 'YDCA'
+services:
+  app_a:
+    image: nginx:alpine
+    container_name: app_a
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app-ab.entrypoints=websecure"
+      - "traefik.http.routers.app-ab.rule=Host(`app-ab.edgardovasquez.cl`)"
+      - "traefik.http.routers.app-ab.tls=true"
+      - "traefik.http.routers.app-ab.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.app-ab.service=app-ab-wrr@file"
+      - "traefik.http.services.app-a.loadbalancer.server.port=80"
+
+networks:
+  traefik-net:
+    external: true
+YDCA
+```
+
+---
+
+#### 8.17 `app_b/index.html` — Página estática de App B (80%)
+
+```bash
+cat > ~/serverInit/app_b/index.html << 'YHTMLB'
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App B</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white; text-align: center;
+        }
+        h1 { font-size: 4rem; margin-bottom: 1rem; }
+        p { font-size: 1.2rem; opacity: 0.9; }
+        .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 2rem; margin-top: 1rem; font-size: 0.9rem; }
+        .weight { font-size: 3rem; font-weight: bold; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>App B</h1>
+        <p>Variante B — A/B Testing</p>
+        <div class="weight">80%</div>
+        <div class="badge">Balanceo Ponderado</div>
+    </div>
+</body>
+</html>
+YHTMLB
+```
+
+---
+
+#### 8.18 `app_b/docker-compose.yml` — Contenedor App B (A/B 80%)
+
+```bash
+cat > ~/serverInit/app_b/docker-compose.yml << 'YDCB'
+services:
+  app_b:
+    image: nginx:alpine
+    container_name: app_b
+    restart: unless-stopped
+    networks:
+      - traefik-net
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app-ab.entrypoints=websecure"
+      - "traefik.http.routers.app-ab.rule=Host(`app-ab.edgardovasquez.cl`)"
+      - "traefik.http.routers.app-ab.tls=true"
+      - "traefik.http.routers.app-ab.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.app-ab.service=app-ab-wrr@file"
+      - "traefik.http.services.app-b.loadbalancer.server.port=80"
+
+networks:
+  traefik-net:
+    external: true
+YDCB
+```
+
+---
+
+#### 8.19 Actualizar `traefik/dynamic.yml` — Agregar servicio WRR para A/B testing
+
+Editar `~/serverInit/traefik/dynamic.yml` y agregar al inicio del archivo:
+
+```yaml
+http:
+  services:
+    app-ab-wrr:
+      weighted:
+        services:
+          - name: app-a@docker
+            weight: 20
+          - name: app-b@docker
+            weight: 80
+```
+
+El archivo completo debe verse así:
+
+```bash
+cat > ~/serverInit/traefik/dynamic.yml << 'YDYN'
+# =============================================================================
+# Traefik – Configuración Dinámica (dynamic.yml)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Servicios WRR — Balanceo Ponderado para A/B Testing
+# ---------------------------------------------------------------------------
+http:
+  services:
+    app-ab-wrr:
+      weighted:
+        services:
+          - name: app-a@docker
+            weight: 20
+          - name: app-b@docker
+            weight: 80
+
+# ---------------------------------------------------------------------------
+# Opciones de TLS
+# ---------------------------------------------------------------------------
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+YDYN
+```
+
+> **Importante**: El router `app-ab` se define en los labels de Docker pero apunta al servicio `app-ab-wrr@file` (definido en el archivo). El sufijo `@file` es necesario para que Traefik busque el servicio en el provider `file` en lugar de `docker`. Traefik recarga `dynamic.yml` automáticamente sin reiniciar.
+
+---
+
 ### Paso 9: Configurar Token de Cloudflare
 
 Este paso es **crítico**. Sin un token válido, los certificados no se emitirán:
@@ -892,6 +1094,10 @@ cd ~/serverInit/app2 && docker compose up -d
 cd ~/serverInit/app_x && docker compose up -d
 cd ~/serverInit/app_y && docker compose up -d
 cd ~/serverInit/app_z && docker compose up -d
+
+# Cluster A/B testing (app_a, app_b)
+cd ~/serverInit/app_a && docker compose up -d
+cd ~/serverInit/app_b && docker compose up -d
 ```
 
 > **Nota importante**: Docker en Oracle Cloud es **lento** (30-180 segundos por comando). Esto es normal debido al almacenamiento en bloque con alta latencia de I/O. Ten paciencia y no canceles los comandos prematuramente.
@@ -916,6 +1122,8 @@ Deberías ver los 3 contenedores corriendo:
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_x |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_y |
 | ... | nginx:alpine | Up X minutes | 80/tcp | app_z |
+| ... | nginx:alpine | Up X minutes | 80/tcp | app_a |
+| ... | nginx:alpine | Up X minutes | 80/tcp | app_b |
 
 #### 11.2 Verificar con curl
 
@@ -934,6 +1142,10 @@ curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
 curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'
 # Deberías ver alternarse: App X, App Y, App Z, App X, App Y...
 
+# Verificar A/B testing — App A (20%) debe aparecer menos que App B (80%)
+for i in {1..10}; do curl -s https://app-ab.edgardovasquez.cl | grep -o '<h1>.*</h1>'; done
+# Deberías ver ~2 veces App A y ~8 veces App B
+
 # Verificar el dashboard de Traefik con autenticación básica
 # Debe retornar código 200
 curl -u usuario_dashboard:CONTRASENA_DASHBOARD -s -o /dev/null -w "%{http_code}" https://traefik.edgardovasquez.cl/dashboard/
@@ -946,6 +1158,7 @@ Abrir las siguientes URLs:
 - 🟢 https://app1.edgardovasquez.cl — Página "App 1" con gradiente púrpura
 - 🟢 https://app2.edgardovasquez.cl — Página "App 2" con gradiente rosa
 - 🟢 https://app-lb.edgardovasquez.cl — Cluster round-robin (refrescar para ver alternar entre App X, Y, Z)
+- 🟢 https://app-ab.edgardovasquez.cl — A/B testing (App A 20% / App B 80%)
 - 🟢 https://traefik.edgardovasquez.cl — Dashboard (usuario: `usuario_dashboard`, contraseña: `CONTRASENA_DASHBOARD`)
 
 ---
@@ -1005,6 +1218,43 @@ Si necesitas que un cliente siempre caiga en el mismo servidor (sesiones persist
 - "traefik.http.services.app-lb.loadbalancer.sticky.cookie=true"
 ```
 Por defecto está en `false` para forzar el balanceo round-robin puro.
+
+---
+
+### A/B Testing con Weighted Round Robin (WRR)
+
+El cluster `app-ab.edgardovasquez.cl` implementa **A/B testing** distribuyendo tráfico con pesos desiguales:
+
+| App | Peso | Tráfico esperado |
+|-----|------|-----------------|
+| App A | 20 | ~20% de las peticiones |
+| App B | 80 | ~80% de las peticiones |
+
+**Cómo funciona:**
+1. Cada contenedor expone su propio servicio de Docker (`app-a`, `app-b`) con `loadbalancer.server.port=80`.
+2. En `traefik/dynamic.yml` se define un servicio **Weighted Round Robin (WRR)** que referencia ambos servicios con sus respectivos pesos.
+3. El router `app-ab` (definido en los labels de Docker) apunta a `app-ab-wrr@file` — el sufijo `@file` indica que el servicio está en el provider `file`.
+4. Traefik recarga `dynamic.yml` automáticamente sin reiniciar.
+
+**Verificar:**
+```bash
+# 10 peticiones — App A (~20%) debe aparecer ~2 veces
+for i in {1..10}; do curl -s https://app-ab.edgardovasquez.cl | grep -o '<h1>.*</h1>'; done
+```
+
+**Para cambiar los pesos**, editar `dynamic.yml`:
+```yaml
+http:
+  services:
+    app-ab-wrr:
+      weighted:
+        services:
+          - name: app-a@docker
+            weight: 30   # ← cambiar aquí
+          - name: app-b@docker
+            weight: 70   # ← cambiar aquí
+```
+Traefik detecta el cambio automáticamente (no requiere restart).
 
 ---
 
@@ -1098,10 +1348,10 @@ cd ~/serverInit/traefik && docker compose down && docker compose up -d
 
 ```bash
 # Detener todos los servicios (apps primero, luego Traefik)
-for d in app1 app2 app_x app_y app_z traefik; do (cd ~/serverInit/$d && docker compose down); done
+for d in app1 app2 app_x app_y app_z app_a app_b traefik; do (cd ~/serverInit/$d && docker compose down); done
 
 # Iniciar todos los servicios (Traefik primero, luego apps)
-for d in traefik app1 app2 app_x app_y app_z; do (cd ~/serverInit/$d && docker compose up -d); done
+for d in traefik app1 app2 app_x app_y app_z app_a app_b; do (cd ~/serverInit/$d && docker compose up -d); done
 
 # Ver logs de Traefik en tiempo real
 docker logs traefik -f
@@ -1132,6 +1382,9 @@ curl -I -H "Host: app2.edgardovasquez.cl" http://127.0.0.1
 # Verificar round-robin local (bypass de DNS)
 for i in {1..6}; do curl -s -H "Host: app-lb.edgardovasquez.cl" http://127.0.0.1 | grep -o '<h1>.*</h1>'; done
 
+# Verificar A/B testing local
+for i in {1..10}; do curl -s -H "Host: app-ab.edgardovasquez.cl" http://127.0.0.1 | grep -o '<h1>.*</h1>'; done
+
 # Probar dashboard con autenticación local
 curl -u usuario_dashboard:CONTRASENA_DASHBOARD -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
 
@@ -1139,6 +1392,7 @@ curl -u usuario_dashboard:CONTRASENA_DASHBOARD -H "Host: traefik.edgardovasquez.
 dig +short app1.edgardovasquez.cl @1.1.1.1
 dig +short app2.edgardovasquez.cl @1.1.1.1
 dig +short app-lb.edgardovasquez.cl @1.1.1.1
+dig +short app-ab.edgardovasquez.cl @1.1.1.1
 dig +short traefik.edgardovasquez.cl @1.1.1.1
 ```
 
@@ -1211,5 +1465,5 @@ Para depuración o pruebas sin un token de Cloudflare válido, el stack puede op
 3. En cada `docker-compose.yml`, cambiar `entrypoints` a `websecure` y descomentar las líneas `.tls` y `.tls.certresolver`
 4. Reiniciar todos los contenedores:
    ```bash
-   for d in traefik app1 app2 app_x app_y app_z; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
+   for d in traefik app1 app2 app_x app_y app_z app_a app_b; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
    ```
