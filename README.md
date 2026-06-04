@@ -283,7 +283,7 @@ Todos los archivos de configuración ya existen en el repositorio con comentario
 
 | Archivo | Propósito |
 |---------|-----------|
-| `traefik/.env` | Variables sensibles: token Cloudflare (`CF_DNS_API_TOKEN`) y credenciales del dashboard (`TRAEFIK_PASS_HASH`). Ver `traefik/.env.example` para la plantilla. |
+| `traefik/.env` | Variables sensibles: token Cloudflare (`CF_DNS_API_TOKEN`), credenciales del dashboard Traefik (`TRAEFIK_PASS_HASH`) y de Grafana (`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`). Ver `traefik/.env.example` para la plantilla. |
 | `traefik/traefik.yml` | Configuración **estática** de Traefik (entrypoints, providers, certificador Let's Encrypt). Se lee al iniciar. |
 | `traefik/dynamic.yml` | Configuración **dinámica** (TLS + router WRR para A/B testing). Se recarga automáticamente. |
 | `traefik/docker-compose.yml` | Contenedor de Traefik con los volumes, puertos, y labels del dashboard. |
