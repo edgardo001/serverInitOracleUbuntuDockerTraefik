@@ -30,7 +30,7 @@
 - **App A / B** — Cluster ponderado (20/80) A/B testing → `https://app-ab.edgardovasquez.cl`
 - **Grafana** — Dashboard KPIs → `https://grafana.edgardovasquez.cl` (admin/admin)
 - **Prometheus** — Métricas internas (no expuesto públicamente)
-- **Dashboard Traefik** — `https://traefik.edgardovasquez.cl` (Basic Auth: `usuario_dashboard` / `CONTRASENA_DASHBOARD`)
+- **Dashboard Traefik** — `https://traefik.edgardovasquez.cl` (Basic Auth: credenciales definidas en `traefik/.env`)
 
 ---
 
@@ -303,11 +303,8 @@ cat > ~/serverInit/traefik/.env << 'EOF'
 CF_DNS_API_TOKEN=REEMPLAZA_CON_TU_TOKEN
 
 # Credenciales para el dashboard de Traefik (traefik.edgardovasquez.cl)
-# Usuario: usuario_dashboard
-# Password: CONTRASENA_DASHBOARD
-# El hash se generó con: openssl passwd -apr1 'CONTRASENA_DASHBOARD'
 # NOTA: Los $$ son necesarios en .env para escapar el $ de Docker Compose
-TRAEFIK_PASS_HASH=usuario_dashboard:$apr1$hash_ejemplo
+TRAEFIK_PASS_HASH=usuario:$$hash_generado_con_htpasswd
 EOF
 ```
 
@@ -1276,7 +1273,8 @@ for i in {1..10}; do curl -s https://app-ab.edgardovasquez.cl | grep -o '<h1>.*<
 
 # Verificar el dashboard de Traefik con autenticación básica
 # Debe retornar código 200
-curl -u usuario_dashboard:CONTRASENA_DASHBOARD -s -o /dev/null -w "%{http_code}" https://traefik.edgardovasquez.cl/dashboard/
+# Reemplaza usuario:contraseña con los valores de traefik/.env
+curl -u "usuario:contraseña" -s -o /dev/null -w "%{http_code}" https://traefik.edgardovasquez.cl/dashboard/
 
 # Verificar métricas de Prometheus (debe retornar métricas en texto plano)
 curl -s -H "Host: app-ab.edgardovasquez.cl" http://127.0.0.1/metrics 2>/dev/null | head -5 || echo "Prometheus expone en puerto interno 8080"
@@ -1291,7 +1289,7 @@ Abrir las siguientes URLs:
 - 🟢 https://app-lb.edgardovasquez.cl — Cluster round-robin (refrescar para ver alternar entre App X, Y, Z)
 - 🟢 https://app-ab.edgardovasquez.cl — A/B testing (App A 20% / App B 80%)
 - 🟢 https://grafana.edgardovasquez.cl — Dashboard KPIs (usuario: `admin`, contraseña: `admin`)
-- 🟢 https://traefik.edgardovasquez.cl — Dashboard (usuario: `usuario_dashboard`, contraseña: `CONTRASENA_DASHBOARD`)
+- 🟢 https://traefik.edgardovasquez.cl — Dashboard (credenciales definidas en `traefik/.env`)
 
 ---
 
@@ -1616,7 +1614,8 @@ for i in {1..6}; do curl -s -H "Host: app-lb.edgardovasquez.cl" http://127.0.0.1
 for i in {1..10}; do curl -s -H "Host: app-ab.edgardovasquez.cl" http://127.0.0.1 | grep -o '<h1>.*</h1>'; done
 
 # Probar dashboard con autenticación local
-curl -u usuario_dashboard:CONTRASENA_DASHBOARD -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
+# Reemplaza usuario:contraseña con los valores de traefik/.env
+curl -u "usuario:contraseña" -H "Host: traefik.edgardovasquez.cl" http://127.0.0.1/dashboard/
 
 # Verificar resolución DNS desde servidores públicos
 dig +short app1.edgardovasquez.cl @1.1.1.1
@@ -1639,7 +1638,7 @@ dig +short traefik.edgardovasquez.cl @1.1.1.1
 | `TLS handshake timeout` al hacer pull | MTU de Docker incorrecto para Oracle Cloud | Verificar que `/etc/docker/daemon.json` tenga `"mtu": 1450` |
 | Docker no responde (timeout) | I/O lento del almacenamiento en bloque | Esperar pacientemente y reintentar el comando |
 | `521` desde Cloudflare | Cloudflare intenta conectar en HTTP con SSL Full | Habilitar **Always Use HTTPS** en Cloudflare → SSL/TLS → Edge Certificates |
-| Dashboard pide credenciales | Comportamiento esperado (Basic Auth) | Usuario: `usuario_dashboard` / Contraseña: `CONTRASENA_DASHBOARD` |
+| Dashboard pide credenciales | Comportamiento esperado (Basic Auth) | Ver credenciales en `traefik/.env` |
 
 ---
 
