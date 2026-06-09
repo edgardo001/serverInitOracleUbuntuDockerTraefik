@@ -247,20 +247,16 @@ sudo systemctl restart docker
 ### Paso 5: Crear Estructura del Proyecto
 
 ```bash
-mkdir -p ~/serverInit/traefik/data ~/serverInit/app1 ~/serverInit/app2
+mkdir -p ~/serverInitOracleUbuntuDockerTraefik/traefik/data ~/serverInitOracleUbuntuDockerTraefik/app1 ~/serverInitOracleUbuntuDockerTraefik/app2
 ```
 
 ---
 
-### Paso 6: Crear Red Docker Compartida
+### Paso 6: Red Docker Compartida
 
-Todos los contenedores (Traefik + apps) deben estar en la misma red Docker para que Traefik pueda enrutar el tráfico:
+Todos los contenedores (Traefik + apps) deben estar en la misma red Docker para que Traefik pueda enrutar el tráfico. La red **`traefik-net`** se crea **automáticamente** al levantar el stack `traefik` (definida con `name: traefik-net` en su `docker-compose.yml`). Los demás stacks la declaran como `external: true` y la reutilizan.
 
-```bash
-docker network create traefik-net
-```
-
-> Esta red se declara como `external: true` en cada `docker-compose.yml`, lo que significa que Docker Compose no la crea ni la destruye — debe existir previamente.
+> No es necesario crear la red manualmente con `docker network create traefik-net`. Se crea sola al ejecutar `docker compose up -d` en `traefik/`.
 
 ---
 
@@ -269,8 +265,8 @@ docker network create traefik-net
 Este archivo almacena los certificados Let's Encrypt. Debe existir y tener permisos restrictivos (600) antes de iniciar Traefik:
 
 ```bash
-touch ~/serverInit/traefik/data/acme.json
-chmod 600 ~/serverInit/traefik/data/acme.json
+touch ~/serverInitOracleUbuntuDockerTraefik/traefik/data/acme.json
+chmod 600 ~/serverInitOracleUbuntuDockerTraefik/traefik/data/acme.json
 ```
 
 > **Seguridad**: `acme.json` contiene las claves privadas de los certificados TLS. Nunca subirlo a Git ni compartirlo.
@@ -283,7 +279,7 @@ Todos los archivos de configuración ya existen en el repositorio con comentario
 
 | Archivo | Propósito |
 |---------|-----------|
-| `traefik/.env` | Variables sensibles: token Cloudflare (`CF_DNS_API_TOKEN`), credenciales del dashboard Traefik (`TRAEFIK_PASS_HASH`) y de Grafana (`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`). Ver `traefik/.env.example` para la plantilla. |
+| `traefik/.env` | Variables sensibles: token Cloudflare (`CF_DNS_API_TOKEN`), credenciales del dashboard Traefik (`TRAEFIK_PASS_HASH`) y de Grafana (`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`). Archivo centralizado — al ejecutar otros stacks (ej: `monitoring`) usar `--env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env`. |
 | `traefik/traefik.yml` | Configuración **estática** de Traefik (entrypoints, providers, certificador Let's Encrypt). Se lee al iniciar. |
 | `traefik/dynamic.yml` | Configuración **dinámica** (TLS + router WRR para A/B testing). Se recarga automáticamente. |
 | `traefik/docker-compose.yml` | Contenedor de Traefik con los volumes, puertos, y labels del dashboard. |
@@ -315,7 +311,7 @@ Todos los archivos de configuración ya existen en el repositorio con comentario
 Este paso es **crítico**. Sin un token válido, los certificados no se emitirán:
 
 ```bash
-nano ~/serverInit/traefik/.env
+nano ~/serverInitOracleUbuntuDockerTraefik/traefik/.env
 # Cambiar la línea:
 #   CF_DNS_API_TOKEN=REEMPLAZA_CON_TU_TOKEN
 # Por tu token real:
@@ -331,23 +327,23 @@ nano ~/serverInit/traefik/.env
 ```bash
 # Primero Traefik — debe estar listo antes de las apps
 # para poder emitir los certificados y configurar el enrutamiento
-cd ~/serverInit/traefik && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/traefik && docker compose up -d
 
 # Luego las aplicaciones
-cd ~/serverInit/app1 && docker compose up -d
-cd ~/serverInit/app2 && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app1 && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app2 && docker compose up -d
 
 # Finalmente el cluster round-robin (app_x, app_y, app_z)
-cd ~/serverInit/app_x && docker compose up -d
-cd ~/serverInit/app_y && docker compose up -d
-cd ~/serverInit/app_z && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_x && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_y && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_z && docker compose up -d
 
 # Cluster A/B testing (app_a, app_b)
-cd ~/serverInit/app_a && docker compose up -d
-cd ~/serverInit/app_b && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_a && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_b && docker compose up -d
 
 # Finalmente el stack de monitoreo (Prometheus + Grafana)
-cd ~/serverInit/monitoring && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/monitoring && docker compose --env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env up -d
 ```
 
 > **Nota importante**: Docker en Oracle Cloud es **lento** (30-180 segundos por comando). Esto es normal debido al almacenamiento en bloque con alta latencia de I/O. Ten paciencia y no canceles los comandos prematuramente.
@@ -420,6 +416,18 @@ Abrir las siguientes URLs:
 
 ---
 
+### Red `traefik-net` — Auto-creada por el stack traefik
+
+La red `traefik-net` se crea automáticamente al levantar `traefik/docker-compose.yml` (definida con `name: traefik-net`). No es necesario crearla manualmente. Los demás stacks la declaran como `external: true` y la reutilizan.
+
+### Variables de entorno — `traefik/.env` como archivo único
+
+Todas las variables sensibles (`CF_DNS_API_TOKEN`, `TRAEFIK_PASS_HASH`, `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`) están centralizadas en `traefik/.env`. Al ejecutar stacks que no son `traefik` (especialmente `monitoring`), hay que pasar `--env-file ../traefik/.env` o usar la ruta absoluta para que Docker Compose resuelva las variables:
+
+```bash
+cd ~/serverInitOracleUbuntuDockerTraefik/monitoring && docker compose --env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env up -d
+```
+
 ## Notas Importantes
 
 ### MTU en Oracle Cloud
@@ -437,7 +445,7 @@ Oracle Cloud usa **jumbo frames** (MTU 9000) en su red interna. Docker crea rede
 - Sin `CF_DNS_API_TOKEN` válido, **no se emiten certificados** y las apps no tendrán HTTPS.
 - Los certificados se renuevan **automáticamente cada 90 días** — Traefik lo gestiona sin intervención.
 - `acme.json` contiene **claves privadas** de los certificados. **Nunca subir a Git** ni compartir.
-- Para respaldar: `cp ~/serverInit/traefik/data/acme.json ~/backup/`
+- Para respaldar: `cp ~/serverInitOracleUbuntuDockerTraefik/traefik/data/acme.json ~/backup/`
 
 ### Redirección HTTP → HTTPS
 
@@ -582,8 +590,8 @@ Para agregar, por ejemplo, `app3.edgardovasquez.cl`:
 
 1. **Crear directorio y página HTML**:
    ```bash
-   mkdir -p ~/serverInit/app3
-   cat > ~/serverInit/app3/index.html << 'EOF'
+   mkdir -p ~/serverInitOracleUbuntuDockerTraefik/app3
+   cat > ~/serverInitOracleUbuntuDockerTraefik/app3/index.html << 'EOF'
    <!DOCTYPE html>
    <html lang="es">
    <head><title>App 3</title></head>
@@ -594,7 +602,7 @@ Para agregar, por ejemplo, `app3.edgardovasquez.cl`:
 
 2. **Crear `docker-compose.yml`** (copiar de app1 y modificar):
    ```bash
-   cp ~/serverInit/app1/docker-compose.yml ~/serverInit/app3/docker-compose.yml
+   cp ~/serverInitOracleUbuntuDockerTraefik/app1/docker-compose.yml ~/serverInitOracleUbuntuDockerTraefik/app3/docker-compose.yml
    ```
    Editar y cambiar:
    - `container_name: app1` → `container_name: app3`
@@ -605,7 +613,7 @@ Para agregar, por ejemplo, `app3.edgardovasquez.cl`:
 
 4. **Iniciar el contenedor**:
    ```bash
-   cd ~/serverInit/app3 && docker compose up -d
+   cd ~/serverInitOracleUbuntuDockerTraefik/app3 && docker compose up -d
    ```
 
 5. Traefik detecta automáticamente el nuevo contenedor y solicita el certificado a Let's Encrypt.
@@ -616,7 +624,7 @@ Para escalar el cluster `app-lb.edgardovasquez.cl` con más réplicas:
 
 1. **Crear nuevo directorio** (ej. `app_w`):
    ```bash
-   mkdir -p ~/serverInit/app_w
+   mkdir -p ~/serverInitOracleUbuntuDockerTraefik/app_w
    ```
 
 2. **Crear `index.html`** con contenido distintivo.
@@ -625,7 +633,7 @@ Para escalar el cluster `app-lb.edgardovasquez.cl` con más réplicas:
 
 4. **Iniciar**:
    ```bash
-   cd ~/serverInit/app_w && docker compose up -d
+   cd ~/serverInitOracleUbuntuDockerTraefik/app_w && docker compose up -d
    ```
 
 5. Traefik detecta automáticamente el nuevo contenedor y comienza a enviarle tráfico en round-robin.
@@ -640,12 +648,12 @@ openssl passwd -apr1 'NuevaContraseña'
 # Salida ejemplo: $apr1$xxxx$yyyyyyyyyyyy
 
 # Editar el archivo .env con el nuevo hash
-nano ~/serverInit/traefik/.env
+nano ~/serverInitOracleUbuntuDockerTraefik/traefik/.env
 # Cambiar la línea TRAEFIK_PASS_HASH con el nuevo usuario:hash
 # NOTA: Duplicar cada $ como $$ (escape de Docker Compose)
 
 # Reiniciar Traefik para aplicar cambios
-cd ~/serverInit/traefik && docker compose down && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/traefik && docker compose down && docker compose up -d
 ```
 
 ### Recargar Traefik después de cambios en `dynamic.yml`
@@ -653,8 +661,8 @@ cd ~/serverInit/traefik && docker compose down && docker compose up -d
 | Acción | Comando | Cuándo usarlo |
 |--------|---------|---------------|
 | **Recarga automática** | *(ninguno)* | Cambios en `dynamic.yml` se detectan solos (ej: cambiar pesos WRR) |
-| **Reinicio suave** | `docker compose -f ~/serverInit/traefik/docker-compose.yml restart` | Si la recarga automática no surtió efecto |
-| **Reinicio completo** | `cd ~/serverInit/traefik && docker compose down && docker compose up -d` | Cambios en `traefik.yml` (config estática) o en `.env` |
+| **Reinicio suave** | `docker compose -f ~/serverInitOracleUbuntuDockerTraefik/traefik/docker-compose.yml restart` | Si la recarga automática no surtió efecto |
+| **Reinicio completo** | `cd ~/serverInitOracleUbuntuDockerTraefik/traefik && docker compose down && docker compose up -d` | Cambios en `traefik.yml` (config estática) o en `.env` |
 
 > `docker compose restart` es más rápido que `down + up` porque no recrea el contenedor, solo reinicia el proceso de Traefik.
 
@@ -664,7 +672,7 @@ Todos los comandos funcionan igual para cualquier app (`app_x`, `app_y`, `app_z`
 
 ```bash
 # --- Desplegar por primera vez o después de git pull ---
-cd ~/serverInit/app_x && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_x && docker compose up -d
 
 # --- Ver estado de una app ---
 docker ps --filter name=app_x
@@ -676,10 +684,10 @@ docker logs app_x -f
 docker restart app_x
 
 # --- Redeploy (bajar y subir, recarga index.html cambios) ---
-cd ~/serverInit/app_x && docker compose down && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_x && docker compose down && docker compose up -d
 
 # --- Redeploy forzado (reconstruye sin caché, útil si cambió la imagen) ---
-cd ~/serverInit/app_x && docker compose down && docker compose pull && docker compose up -d
+cd ~/serverInitOracleUbuntuDockerTraefik/app_x && docker compose down && docker compose pull && docker compose up -d
 
 # --- Detener app sin eliminar el contenedor ---
 docker stop app_x
@@ -696,20 +704,25 @@ Solo `docker compose down && docker compose up -d` forzará a nginx a mostrar ca
 
 **Redeploy de todas las apps `app_*` a la vez:**
 ```bash
-for app in app_x app_y app_z app_a app_b; do (cd ~/serverInit/$app && docker compose down && docker compose up -d); done
+for app in app_x app_y app_z app_a app_b; do (cd ~/serverInitOracleUbuntuDockerTraefik/$app && docker compose down && docker compose up -d); done
 ```
+
+> **Nota**: Los comandos con `monitoring` necesitan `--env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env` porque Grafana lee credenciales desde `traefik/.env`. Si ejecutás stacks individuales desde su directorio, usá `--env-file ../traefik/.env`.
 
 ### Comandos Rápidos
 
 ```bash
 # Detener todos los servicios (apps primero, luego Traefik)
-for d in app1 app2 app_x app_y app_z app_a app_b monitoring traefik; do (cd ~/serverInit/$d && docker compose down); done
+for d in app1 app2 app_x app_y app_z app_a app_b monitoring traefik; do (cd ~/serverInitOracleUbuntuDockerTraefik/$d && docker compose down); done
+
+# Detener todos los servicios, borra volumenes, usar con cuidado (apps primero, luego Traefik)
+for d in app1 app2 app_x app_y app_z app_a app_b monitoring traefik; do (cd ~/serverInitOracleUbuntuDockerTraefik/$d && docker compose down --volumes); done
 
 # Iniciar todos los servicios, pero con la reconstruccion del contenedor (Traefik primero, luego apps)
-for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose up -d --build); done
+for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInitOracleUbuntuDockerTraefik/$d && docker compose --env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env up -d --build); done
 
 # Iniciar todos los servicios (Traefik primero, luego apps)
-for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose up -d); done
+for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInitOracleUbuntuDockerTraefik/$d && docker compose --env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env up -d); done
 
 # Ver logs de Traefik en tiempo real
 docker logs traefik -f
@@ -718,7 +731,7 @@ docker logs traefik -f
 docker logs traefik --tail 50
 
 # Reiniciar Traefik sin detener las apps
-cd ~/serverInit/traefik && docker compose restart
+cd ~/serverInitOracleUbuntuDockerTraefik/traefik && docker compose restart
 ```
 
 ### Comandos de Diagnóstico
@@ -764,7 +777,7 @@ dig +short traefik.edgardovasquez.cl @1.1.1.1
 |----------|---------------|----------|
 | `404` al visitar una app | App no iniciada o Traefik no la detecta | `docker ps` para verificar contenedores `Up` |
 | `502 Bad Gateway` | App iniciada pero no responde internamente | `docker logs app1` para ver errores de nginx |
-| Certificados no se emiten | `CF_DNS_API_TOKEN` inválido o no configurado | Verificar `~/serverInit/traefik/.env` y `docker logs traefik` |
+| Certificados no se emiten | `CF_DNS_API_TOKEN` inválido o no configurado | Verificar `~/serverInitOracleUbuntuDockerTraefik/traefik/.env` y `docker logs traefik` |
 | `TLS handshake timeout` al hacer pull | MTU de Docker incorrecto para Oracle Cloud | Verificar que `/etc/docker/daemon.json` tenga `"mtu": 1450` |
 | Docker no responde (timeout) | I/O lento del almacenamiento en bloque | Esperar pacientemente y reintentar el comando |
 | `521` desde Cloudflare | Cloudflare intenta conectar en HTTP con SSL Full | Habilitar **Always Use HTTPS** en Cloudflare → SSL/TLS → Edge Certificates |
@@ -825,5 +838,5 @@ Para depuración o pruebas sin un token de Cloudflare válido, el stack puede op
 3. En cada `docker-compose.yml`, cambiar `entrypoints` a `websecure` y descomentar las líneas `.tls` y `.tls.certresolver`
 4. Reiniciar todos los contenedores:
    ```bash
-   for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose down && docker compose up -d); done
+   for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInitOracleUbuntuDockerTraefik/$d && docker compose down && docker compose up -d); done
    ```
