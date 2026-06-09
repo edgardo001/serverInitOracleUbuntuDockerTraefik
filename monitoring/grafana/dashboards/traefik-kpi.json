@@ -10,7 +10,7 @@
     {
       "title": "Distribución de Tráfico — A/B Testing (app-ab)",
       "type": "piechart",
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
           "expr": "sum(increase(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) by (service)",
@@ -22,8 +22,8 @@
         "pieType": "pie",
         "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
-          "values": true,
-          "calcs": [],
+          "values": false,
+          "calcs": ["lastNotNull"],
           "fields": ""
         }
       },
@@ -42,7 +42,7 @@
     {
       "title": "Distribución de Tráfico — Round-Robin (app-lb)",
       "type": "piechart",
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
           "expr": "sum(increase(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) by (service)",
@@ -54,8 +54,8 @@
         "pieType": "pie",
         "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
-          "values": true,
-          "calcs": [],
+          "values": false,
+          "calcs": ["lastNotNull"],
           "fields": ""
         }
       },
@@ -71,7 +71,7 @@
     {
       "title": "Requests por Segundo (RPS) — Total",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
       "targets": [
         {
           "expr": "sum(rate(traefik_service_requests_total[$__rate_interval]))",
@@ -89,7 +89,7 @@
     {
       "title": "Porcentaje por Servicio — A/B Testing",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "targets": [
         {
           "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) / on() group_left sum(rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) * 100",
@@ -111,7 +111,7 @@
     {
       "title": "Porcentaje por Servicio — Round-Robin",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "targets": [
         {
           "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) / on() group_left sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
@@ -134,7 +134,7 @@
     {
       "title": "Tiempo de Respuesta — P50 / P95 / P99",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(traefik_service_request_duration_seconds_bucket[$__rate_interval])) by (le))",
@@ -162,7 +162,7 @@
     {
       "title": "Códigos de Estado HTTP",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
       "targets": [
         {
           "expr": "sum(rate(traefik_service_requests_total{code=~\"2..\"}[$__rate_interval])) by (code)",
