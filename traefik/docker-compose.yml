@@ -37,9 +37,10 @@ services:
 
     # Redes a las que se conecta el contenedor.
     networks:
-      # Se conecta a la red externa "traefik-net", compartida con los servicios
-      # que Traefik debe enrutar. Todos los contenedores que necesiten ser
-      # accesibles a través de Traefik deben estar en esta misma red.
+      # Se conecta a la red "traefik-net" (creada automáticamente por este
+      # stack), compartida con los servicios que Traefik debe enrutar.
+      # Todos los contenedores que necesiten ser accesibles a través de
+      # Traefik deben estar en esta misma red.
       - traefik-net
 
     # Puertos expuestos en el host. Traefik necesita escuchar en los puertos
@@ -119,9 +120,8 @@ services:
 # Redes
 # =============================================================================
 networks:
-  # Red "traefik-net": se declara como externa, lo que significa que debe
-  # haber sido creada previamente con `docker network create traefik-net`.
-  # Esto permite que múltiples stacks de Docker Compose compartan la misma
-  # red y que Traefik pueda enrutar tráfico hacia todos ellos.
+  # Red "traefik-net": se crea automáticamente al levantar este stack.
+  # Se fija el nombre explícito "traefik-net" (sin prefijo de proyecto) para
+  # que otros stacks puedan declararla como "external: true" y compartirla.
   traefik-net:
-    external: true
+    name: traefik-net
