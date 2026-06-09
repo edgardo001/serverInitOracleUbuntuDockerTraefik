@@ -77,9 +77,6 @@
         └── dashboards/
             ├── dashboards.yml    # Provisioning de dashboards
             └── traefik-kpi.json  # Dashboard KPIs (A/B, round-robin, latencias)
-└── app_b/
-    ├── docker-compose.yml    # Contenedor App B — A/B testing (80%)
-    └── index.html
 ```
 
 ---
@@ -281,17 +278,17 @@ Todos los archivos de configuración ya existen en el repositorio con comentario
 |---------|-----------|
 | `traefik/.env` | Variables sensibles: token Cloudflare (`CF_DNS_API_TOKEN`), credenciales del dashboard Traefik (`TRAEFIK_PASS_HASH`) y de Grafana (`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`). Archivo centralizado — al ejecutar otros stacks (ej: `monitoring`) usar `--env-file ~/serverInitOracleUbuntuDockerTraefik/traefik/.env`. |
 | `traefik/traefik.yml` | Configuración **estática** de Traefik (entrypoints, providers, certificador Let's Encrypt). Se lee al iniciar. |
-| `traefik/dynamic.yml` | Configuración **dinámica** (TLS + router WRR para A/B testing). Se recarga automáticamente. |
+| `traefik/dynamic.yml` | Configuración **dinámica** (TLS + routers WRR para A/B testing y round-robin). Se recarga automáticamente. |
 | `traefik/docker-compose.yml` | Contenedor de Traefik con los volumes, puertos, y labels del dashboard. |
 | `app1/docker-compose.yml` | App1 expuesta en `app1.edgardovasquez.cl` |
 | `app1/index.html` | Página estática de App1 |
 | `app2/docker-compose.yml` | App2 expuesta en `app2.edgardovasquez.cl` |
 | `app2/index.html` | Página estática de App2 |
-| `app_x/docker-compose.yml` | Parte del cluster round-robin (mismo router `app-lb`). Ver nota abajo. |
+| `app_x/docker-compose.yml` | Parte del cluster round-robin — expone servicio `app-x@docker`. Ver nota abajo. |
 | `app_x/index.html` | Página de App X |
-| `app_y/docker-compose.yml` | Parte del cluster round-robin |
+| `app_y/docker-compose.yml` | Parte del cluster round-robin — expone servicio `app-y@docker`. |
 | `app_y/index.html` | Página de App Y |
-| `app_z/docker-compose.yml` | Parte del cluster round-robin |
+| `app_z/docker-compose.yml` | Parte del cluster round-robin — expone servicio `app-z@docker`. |
 | `app_z/index.html` | Página de App Z |
 | `app_a/docker-compose.yml` | App A — A/B testing (20%), solo expone servicio `app-a@docker` |
 | `app_a/index.html` | Página de App A |
@@ -302,8 +299,8 @@ Todos los archivos de configuración ya existen en el repositorio con comentario
 | `monitoring/grafana/datasources/datasource.yml` | Datasource Prometheus auto-provisionado |
 | `monitoring/grafana/dashboards/dashboards.yml` | Provisioning de dashboards |
 
-> **Clave del round-robin**: Los 3 contenedores (`app_x`, `app_y`, `app_z`) usan el **mismo nombre de router** (`app-lb`) y el **mismo nombre de servicio** (`app-lb`). Traefik los agrupa automáticamente como 3 servidores detrás de un solo balanceador. La etiqueta `sticky.cookie=false` deshabilita sesiones persistentes.
-
+> **Arquitectura Round-Robin**: El router `app-lb` y el servicio WRR `app-lb-rr` se definen en `dynamic.yml` con pesos iguales (1:1:1). Cada contenedor expone su propio servicio via label Docker (`app-x@docker`, `app-y@docker`, `app-z@docker`). Para agregar réplicas, crea un nuevo contenedor con su propio servicio y agrégalo al WRR en `dynamic.yml`.
+>
 > **Arquitectura A/B**: El router `app-ab` y el servicio WRR `app-ab-wrr` se definen en `dynamic.yml`. Los contenedores `app_a` y `app_b` solo exponen sus servicios via labels Docker (`app-a@docker`, `app-b@docker`). Traefik recarga `dynamic.yml` automáticamente — si solo cambias pesos no necesitas reiniciar nada.
 
 ### Paso 9: Configurar Token de Cloudflare
@@ -463,13 +460,12 @@ curl -I http://app1.edgardovasquez.cl
 
 ### Balanceo Round-Robin con Traefik
 
-El cluster `app-lb.edgardovasquez.cl` demuestra una característica poderosa de Traefik: **balanceo de carga automático entre múltiples contenedores**.
+El cluster `app-lb.edgardovasquez.cl` implementa **Weighted Round Robin con pesos iguales** entre 3 contenedores.
 
 **Cómo funciona:**
-- Los 3 contenedores (`app_x`, `app_y`, `app_z`) definen el **mismo router** (`app-lb`) y el **mismo servicio** (`app-lb`) en sus labels de Docker.
-- Traefik detecta que múltiples contenedores exponen el mismo servicio y los agrupa automáticamente como servidores backend.
-- El método de balanceo por defecto es **Weighted Round Robin** (WRR) con peso igual para todos.
-- Cada nueva petición HTTP se enruta al siguiente contenedor de la lista circular.
+1. Cada contenedor expone su servicio via Docker label: `traefik.http.services.app-x.loadbalancer.server.port=80` (sin router).
+2. En `traefik/dynamic.yml` se define el **router** `app-lb` y un servicio **Weighted Round Robin (WRR)** que referencia `app-x@docker`, `app-y@docker` y `app-z@docker` con peso 1 cada uno.
+3. Traefik distribuye las peticiones equitativamente entre los 3 backends.
 
 **Verificar el balanceo:**
 ```bash
@@ -477,12 +473,23 @@ El cluster `app-lb.edgardovasquez.cl` demuestra una característica poderosa de 
 for i in {1..6}; do curl -s https://app-lb.edgardovasquez.cl | grep -o '<h1>.*</h1>'; done
 ```
 
-**Sticky Sessions (opcional):**
-Si necesitas que un cliente siempre caiga en el mismo servidor (sesiones persistentes), activa la cookie de afinidad:
-```yaml
-- "traefik.http.services.app-lb.loadbalancer.sticky.cookie=true"
-```
-Por defecto está en `false` para forzar el balanceo round-robin puro.
+**Para agregar más réplicas** (ej: `app-w`):
+1. Crear `app_w/docker-compose.yml` con label `traefik.http.services.app-w.loadbalancer.server.port=80`
+2. Agregar al WRR en `dynamic.yml`:
+   ```yaml
+   app-lb-rr:
+     weighted:
+       services:
+         - name: app-x@docker
+           weight: 1
+         - name: app-y@docker
+           weight: 1
+         - name: app-z@docker
+           weight: 1
+         - name: app-w@docker   # ← nueva réplica
+           weight: 1
+   ```
+Traefik recarga `dynamic.yml` automáticamente (sin reiniciar).
 
 ---
 
@@ -539,7 +546,7 @@ El stack de monitoreo permite visualizar en tiempo real los KPIs del balanceo de
 | Panel | Qué muestra |
 |-------|------------|
 | Distribución A/B Testing | Gráfico de torta con % de requests entre App A (20%) y App B (80%) |
-| Distribución Round-Robin | Gráfico de torta con % entre App X, Y, Z (~33% cada una) |
+| Distribución Round-Robin | Gráfico de torta con % entre App X, Y, Z (33% c/u via WRR en `dynamic.yml`) |
 | Requests por Segundo (RPS) | Serie temporal de throughput total |
 | % por Servicio A/B | Líneas temporales del porcentaje real vs esperado |
 | % por Servicio RR | Líneas temporales del porcentaje real vs esperado |
@@ -629,14 +636,28 @@ Para escalar el cluster `app-lb.edgardovasquez.cl` con más réplicas:
 
 2. **Crear `index.html`** con contenido distintivo.
 
-3. **Crear `docker-compose.yml`**: copiar de `app_x` y cambiar solo `container_name: app_w`. **No cambiar** los labels del router/servicio — deben mantener `app-lb` para que Traefik los agregue al mismo balanceador.
+3. **Crear `docker-compose.yml`**: copiar de `app_x` y cambiar `container_name: app_w` y la label del servicio a `traefik.http.services.app-w.loadbalancer.server.port=80`.
 
-4. **Iniciar**:
+4. **Agregar al WRR en `traefik/dynamic.yml`**:
+   ```yaml
+   app-lb-rr:
+     weighted:
+       services:
+         - name: app-x@docker
+           weight: 1
+         - name: app-y@docker
+           weight: 1
+         - name: app-z@docker
+           weight: 1
+         - name: app-w@docker   # ← nueva réplica
+           weight: 1
+   ```
+   Traefik recarga `dynamic.yml` automáticamente.
+
+5. **Iniciar**:
    ```bash
    cd ~/serverInitOracleUbuntuDockerTraefik/app_w && docker compose up -d
    ```
-
-5. Traefik detecta automáticamente el nuevo contenedor y comienza a enviarle tráfico en round-robin.
 
 ---
 

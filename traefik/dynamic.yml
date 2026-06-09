@@ -7,10 +7,10 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Routers y Servicios — A/B Testing con WRR
+# Routers y Servicios — A/B Testing y Round-Robin con WRR
 # ---------------------------------------------------------------------------
-# Router + Weighted Round Robin para app-ab.edgardovasquez.cl
-# Los backends app-a y app-b se exponen via Docker provider (app-a@docker).
+# app-ab.edgardovasquez.cl: WRR con pesos 20/80 entre app-a y app-b
+# app-lb.edgardovasquez.cl: WRR con pesos iguales entre app-x, app-y y app-z
 http:
   routers:
     app-ab:
@@ -21,6 +21,14 @@ http:
         certResolver: letsencrypt
       service: app-ab-wrr
 
+    app-lb:
+      entrypoints:
+        - websecure
+      rule: Host(`app-lb.edgardovasquez.cl`)
+      tls:
+        certResolver: letsencrypt
+      service: app-lb-rr
+
   services:
     app-ab-wrr:
       weighted:
@@ -29,6 +37,16 @@ http:
             weight: 20
           - name: app-b@docker
             weight: 80
+
+    app-lb-rr:
+      weighted:
+        services:
+          - name: app-x@docker
+            weight: 1
+          - name: app-y@docker
+            weight: 1
+          - name: app-z@docker
+            weight: 1
 
 # ---------------------------------------------------------------------------
 # Opciones de TLS
