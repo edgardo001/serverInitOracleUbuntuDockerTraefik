@@ -13,7 +13,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(delta(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) by (service)",
+          "expr": "sum(increase(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) by (service)",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
@@ -23,7 +23,7 @@
         "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
           "values": true,
-          "calcs": ["sum"],
+          "calcs": [],
           "fields": ""
         }
       },
@@ -45,7 +45,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
-          "expr": "sum(delta(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) by (service)",
+          "expr": "sum(increase(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) by (service)",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
@@ -55,7 +55,7 @@
         "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
           "values": true,
-          "calcs": ["sum"],
+          "calcs": [],
           "fields": ""
         }
       },
@@ -92,7 +92,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
       "targets": [
         {
-          "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) / on() sum(rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) * 100",
+          "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) / on() group_left sum(rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
@@ -114,7 +114,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 6, "y": 16 },
       "targets": [
         {
-          "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) / on() sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
+          "expr": "sum by (service) (rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) / on() group_left sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
