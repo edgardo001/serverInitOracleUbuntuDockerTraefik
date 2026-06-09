@@ -705,6 +705,9 @@ for app in app_x app_y app_z app_a app_b; do (cd ~/serverInit/$app && docker com
 # Detener todos los servicios (apps primero, luego Traefik)
 for d in app1 app2 app_x app_y app_z app_a app_b monitoring traefik; do (cd ~/serverInit/$d && docker compose down); done
 
+# Iniciar todos los servicios, pero con la reconstruccion del contenedor (Traefik primero, luego apps)
+for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose up -d --build); done
+
 # Iniciar todos los servicios (Traefik primero, luego apps)
 for d in traefik app1 app2 app_x app_y app_z app_a app_b monitoring; do (cd ~/serverInit/$d && docker compose up -d); done
 
