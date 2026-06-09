@@ -13,7 +13,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(delta(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) by (service)",
+          "expr": "sum(delta(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) by (service)",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
@@ -45,7 +45,7 @@
       "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
-          "expr": "sum(delta(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) by (service)",
+          "expr": "sum(delta(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) by (service)",
           "legendFormat": "{{ service }}",
           "refId": "A"
         }
@@ -92,12 +92,12 @@
       "gridPos": { "h": 8, "w": 6, "x": 0, "y": 16 },
       "targets": [
         {
-          "expr": "sum(rate(traefik_service_requests_total{service=\"app-a@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) * 100",
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-a@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "App A (esperado 20%)",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(traefik_service_requests_total{service=\"app-b@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-a|app-b\"}[$__rate_interval])) * 100",
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-b@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"(app-a|app-b)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "App B (esperado 80%)",
           "refId": "B"
         }
@@ -115,17 +115,17 @@
       "gridPos": { "h": 8, "w": 6, "x": 6, "y": 16 },
       "targets": [
         {
-          "expr": "sum(rate(traefik_service_requests_total{service=\"app-x@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-x@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "App X (esperado 33.3%)",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(traefik_service_requests_total{service=\"app-y@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-y@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "App Y (esperado 33.3%)",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(traefik_service_requests_total{service=\"app-z@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"app-x|app-y|app-z\"}[$__rate_interval])) * 100",
+          "expr": "sum(rate(traefik_service_requests_total{service=\"app-z@docker\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{service=~\"(app-x|app-y|app-z)@docker\"}[$__rate_interval])) * 100",
           "legendFormat": "App Z (esperado 33.3%)",
           "refId": "C"
         }
