@@ -19,20 +19,18 @@
         }
       ],
       "options": {
+        "displayLabels": ["name", "percent"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
         "pieType": "pie",
-        "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
-          "values": false,
           "calcs": ["lastNotNull"],
-          "fields": ""
-        }
+          "fields": "",
+          "values": false
+        },
+        "tooltip": { "mode": "single", "sort": "none" }
       },
       "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "custom": { "displayName": "{{ service }}" }
-        },
+        "defaults": { "unit": "short", "decimals": 0 },
         "overrides": [
           { "matcher": { "id": "byName", "options": "app-a@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4CAF50" } }] },
           { "matcher": { "id": "byName", "options": "app-b@docker" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF5722" } }] }
@@ -51,13 +49,15 @@
         }
       ],
       "options": {
+        "displayLabels": ["name", "percent"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
         "pieType": "pie",
-        "legend": { "displayMode": "table", "placement": "right" },
         "reduceOptions": {
-          "values": false,
           "calcs": ["lastNotNull"],
-          "fields": ""
-        }
+          "fields": "",
+          "values": false
+        },
+        "tooltip": { "mode": "single", "sort": "none" }
       },
       "fieldConfig": {
         "defaults": { "unit": "short", "decimals": 0 },
